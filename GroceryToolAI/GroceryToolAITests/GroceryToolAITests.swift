@@ -49,4 +49,12 @@ struct GroceryToolAITests {
         let plans = ShoppingPlanner.plans(for: ["Coca-Cola"], stores: [pepsiOnly], preferences: UserPreferences())
         #expect(plans.first?.substitutions["coca-cola"] == "Pepsi Cola")
     }
+
+    @Test func highlyReviewedStoreReceivesRankingBoost() {
+        let equalA = GroceryStore(name: "Blue Shop", travelMinutes: 5, distanceMiles: 1, offers: [ProductOffer(product: "Milk", price: 4, category: .dairy)])
+        let equalB = GroceryStore(name: "White Shop", travelMinutes: 5, distanceMiles: 1, offers: [ProductOffer(product: "Milk", price: 4, category: .dairy)])
+        let reviews = [StoreReview(storeName: "White Shop", username: "admin", rating: 5, comment: "Reliable")]
+        let plans = ShoppingPlanner.plans(for: ["Milk"], stores: [equalA, equalB], preferences: UserPreferences(), reviews: reviews)
+        #expect(plans.first?.stops.first?.store.name == "White Shop")
+    }
 }

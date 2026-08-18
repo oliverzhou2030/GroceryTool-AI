@@ -84,14 +84,19 @@ enum SpreadsheetExporter {
 }
 
 enum ShoppingPlanner {
-    static func plans(for queries: [String], stores: [GroceryStore], preferences: UserPreferences) -> [ShoppingPlan] {
+    static func plans(for queries: [String], stores: [GroceryStore], preferences: UserPreferences, reviews: [StoreReview] = []) -> [ShoppingPlan] {
         let wanted = queries.map { $0.lowercased().trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        let ratingBonus: (String) -> Double = { name in
+            let ratings = reviews.filter { $0.storeName == name }.map(\.rating)
+            guard !ratings.isEmpty else { return 0 }
+            return Double(ratings.reduce(0, +)) / Double(ratings.count)
+        }
         var results: [ShoppingPlan] = []
         for store in stores {
             let matched = wanted.compactMap { query in store.offers.first { $0.product.lowercased().contains(query) } }
             if matched.count == wanted.count {
                 let pref = preferences.storeWeights[store.name, default: 0]
-                results.append(ShoppingPlan(title: "One stop at \(store.name)", stops: [PlanStop(store: store, products: matched)], missing: [], substitutions: [:], score: Double(store.travelMinutes) + matched.reduce(0) { $0 + $1.price } - pref * 4, pros: ["Gets everything in one stop", pref > 0 ? "Matches your store preference" : "Simple trip"], cons: store.travelMinutes > 20 ? ["Longer drive"] : []))
+                results.append(ShoppingPlan(title: "One stop at \(store.name)", stops: [PlanStop(store: store, products: matched)], missing: [], substitutions: [:], score: Double(store.travelMinutes) + matched.reduce(0) { $0 + $1.price } - pref * 4 - ratingBonus(store.name), pros: ["Gets everything in one stop", pref > 0 ? "Matches your store preference" : "Simple trip"], cons: store.travelMinutes > 20 ? ["Longer drive"] : []))
             }
         }
         for firstIndex in stores.indices { for secondIndex in stores.indices where secondIndex > firstIndex {
@@ -100,7 +105,7 @@ enum ShoppingPlanner {
             for store in pair { let found = wanted.compactMap { q in store.offers.first { $0.product.lowercased().contains(q) } }; if !found.isEmpty { stops.append(PlanStop(store: store, products: found)) } }
             for q in wanted where !stops.flatMap(\.products).contains(where: { $0.product.lowercased().contains(q) }) { missing.append(q) }
             if missing.isEmpty {
-                let preferenceBonus = pair.reduce(0.0) { $0 + preferences.storeWeights[$1.name, default: 0] * 3 }
+                let preferenceBonus = pair.reduce(0.0) { $0 + preferences.storeWeights[$1.name, default: 0] * 3 + ratingBonus($1.name) }
                 results.append(ShoppingPlan(title: "Split between \(pair[0].name) + \(pair[1].name)", stops: stops, missing: [], substitutions: [:], score: Double(stops.reduce(0) { $0 + $1.store.travelMinutes }) + stops.flatMap(\.products).reduce(0) { $0 + $1.price } - preferenceBonus, pros: ["All requested products available", "May reduce product cost"], cons: ["Requires two stops"]))
             }
         }}
@@ -112,7 +117,7 @@ enum ShoppingPlanner {
                     else if let alternative = store.offers.first(where: { $0.alternatives.contains(where: { $0.lowercased().contains(query) }) }) { offers.append(alternative); subs[query] = alternative.product }
                     else { missing.append(query) }
                 }
-                if !offers.isEmpty { results.append(ShoppingPlan(title: "Nearby alternatives at \(store.name)", stops: [PlanStop(store: store, products: offers)], missing: missing, substitutions: subs, score: Double(store.travelMinutes) + 15 + Double(missing.count * 20), pros: ["Nearest practical option", "Offers similar products"], cons: missing.isEmpty ? ["Uses substitutions"] : ["Some items unavailable"])) }
+                if !offers.isEmpty { results.append(ShoppingPlan(title: "Nearby alternatives at \(store.name)", stops: [PlanStop(store: store, products: offers)], missing: missing, substitutions: subs, score: Double(store.travelMinutes) + 15 + Double(missing.count * 20) - ratingBonus(store.name), pros: ["Nearest practical option", "Offers similar products"], cons: missing.isEmpty ? ["Uses substitutions"] : ["Some items unavailable"])) }
             }
         }
         return results.sorted { $0.score < $1.score }

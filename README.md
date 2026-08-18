@@ -11,13 +11,19 @@ A native iPhone and Mac grocery assistant that turns receipt photos into clean b
 - UTF-8 CSV export for Microsoft Excel and Google Sheets
 - One-store and two-store shopping plans with price, travel time, pros, and cons
 - Similar-product recommendations when a requested brand is unavailable nearby
-- Universal SwiftUI interface for iPhone and Mac
+- iPhone location permission flow for nearby-store comparisons
+- Local account creation and sign-in, with a seeded `admin` / `admin` demo account
+- White and light-blue design with System, Light, and Dark appearance modes
+- Shop star ratings and written reviews that influence recommendations
+- Responsive SwiftUI interface for iPhone and Mac
 
 ## Open and run
 
 1. Open `GroceryToolAI/GroceryToolAI.xcodeproj` in Xcode 26 or newer.
 2. Select `GroceryToolAI` and choose My Mac or an iPhone simulator.
 3. Press Run.
+
+On first sign-in, allow current-location access to enter the iPhone app. For development, use username `admin` and password `admin`. This is a local demo account; replace it with backend authentication before releasing the app.
 
 The sample store catalog is local and editable in `AppStore.swift`. Real-time retailer inventory requires retailer-specific APIs; see **External APIs**.
 

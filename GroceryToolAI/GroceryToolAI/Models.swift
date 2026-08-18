@@ -1,5 +1,26 @@
 import Foundation
 
+enum AppTheme: String, Codable, CaseIterable, Identifiable {
+    case system = "System", light = "Light", dark = "Dark"
+    var id: String { rawValue }
+}
+
+struct LocalAccount: Identifiable, Codable, Equatable {
+    var id = UUID()
+    var username: String
+    var displayName: String
+    var passwordHash: String
+}
+
+struct StoreReview: Identifiable, Codable, Hashable {
+    var id = UUID()
+    var storeName: String
+    var username: String
+    var rating: Int
+    var comment: String
+    var date = Date()
+}
+
 enum GroceryCategory: String, Codable, CaseIterable, Identifiable {
     case produce = "Produce", dairy = "Dairy", meat = "Meat", pantry = "Pantry"
     case frozen = "Frozen", bakery = "Bakery", beverage = "Beverages"
@@ -68,6 +89,21 @@ struct UserPreferences: Codable, Equatable {
     var storeWeights: [String: Double] = [:]
     var categorySpend: [GroceryCategory: Double] = [:]
     var selectedPlans: Int = 0
+    var theme: AppTheme = .system
+    init(storeWeights: [String: Double] = [:], categorySpend: [GroceryCategory: Double] = [:], selectedPlans: Int = 0, theme: AppTheme = .system) {
+        self.storeWeights = storeWeights
+        self.categorySpend = categorySpend
+        self.selectedPlans = selectedPlans
+        self.theme = theme
+    }
+    private enum CodingKeys: String, CodingKey { case storeWeights, categorySpend, selectedPlans, theme }
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        storeWeights = try container.decodeIfPresent([String: Double].self, forKey: .storeWeights) ?? [:]
+        categorySpend = try container.decodeIfPresent([GroceryCategory: Double].self, forKey: .categorySpend) ?? [:]
+        selectedPlans = try container.decodeIfPresent(Int.self, forKey: .selectedPlans) ?? 0
+        theme = try container.decodeIfPresent(AppTheme.self, forKey: .theme) ?? .system
+    }
     mutating func record(plan: ShoppingPlan) {
         selectedPlans += 1
         for stop in plan.stops { storeWeights[stop.store.name, default: 0] += 1 }
