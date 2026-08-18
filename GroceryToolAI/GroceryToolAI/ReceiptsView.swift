@@ -1,6 +1,7 @@
 import SwiftUI
 import PhotosUI
 import UniformTypeIdentifiers
+import PDFKit
 #if os(iOS)
 import UIKit
 #elseif os(macOS)
@@ -110,28 +111,40 @@ struct ReceiptDetailView: View {
     let receipt: GroceryReceipt
     let onDelete: () -> Void
     @State private var confirmingDelete = false
-    @State private var imageMode = ReceiptImageMode.cleaned
+    @State private var documentMode = ReceiptDocumentMode.pdf
     @State private var showingFullImage = false
 
-    private var displayedImageURL: URL? {
-        store.imageURL(filename: imageMode == .cleaned ? receipt.cleanedImageFilename : receipt.originalImageFilename)
+    private var displayedDocumentURL: URL? {
+        switch documentMode {
+        case .pdf: store.documentURL(filename: receipt.pdfFilename)
+        case .cleaned: store.imageURL(filename: receipt.cleanedImageFilename)
+        case .original: store.imageURL(filename: receipt.originalImageFilename)
+        }
     }
 
     var body: some View {
         List {
-            if receipt.cleanedImageFilename != nil || receipt.originalImageFilename != nil {
-                Section("Receipt image") {
-                    Picker("Image", selection: $imageMode) {
-                        ForEach(ReceiptImageMode.allCases) { Text($0.rawValue).tag($0) }
+            if receipt.pdfFilename != nil || receipt.cleanedImageFilename != nil || receipt.originalImageFilename != nil {
+                Section("Receipt document") {
+                    Picker("Document", selection: $documentMode) {
+                        if receipt.pdfFilename != nil { Text("PDF").tag(ReceiptDocumentMode.pdf) }
+                        if receipt.cleanedImageFilename != nil { Text("Cleaned").tag(ReceiptDocumentMode.cleaned) }
+                        if receipt.originalImageFilename != nil { Text("Original").tag(ReceiptDocumentMode.original) }
                     }
                     .pickerStyle(.segmented)
-                    if let displayedImageURL {
-                        ReceiptStoredImage(url: displayedImageURL)
-                            .frame(maxWidth: .infinity, minHeight: 260, maxHeight: 520)
-                            .contentShape(Rectangle())
-                            .onTapGesture { showingFullImage = true }
-                        Label(imageMode == .cleaned ? "Whitened and enhanced for easier reading" : "Original imported receipt", systemImage: imageMode == .cleaned ? "wand.and.stars" : "photo")
+                    if let displayedDocumentURL {
+                        Group {
+                            if documentMode == .pdf { ReceiptPDFView(url: displayedDocumentURL) }
+                            else { ReceiptStoredImage(url: displayedDocumentURL) }
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 360, maxHeight: 560)
+                        .contentShape(Rectangle())
+                        .onTapGesture { showingFullImage = true }
+                        Label(documentDescription, systemImage: documentMode == .pdf ? "doc.richtext" : (documentMode == .cleaned ? "wand.and.stars" : "photo"))
                             .font(.caption).foregroundStyle(.secondary)
+                        if let pdfURL = store.documentURL(filename: receipt.pdfFilename) {
+                            ShareLink(item: pdfURL) { Label("Share clean receipt PDF", systemImage: "square.and.arrow.up") }
+                        }
                     }
                 }
             } else {
@@ -165,21 +178,47 @@ struct ReceiptDetailView: View {
         .sheet(isPresented: $showingFullImage) {
             NavigationStack {
                 ScrollView([.horizontal, .vertical]) {
-                    if let displayedImageURL { ReceiptStoredImage(url: displayedImageURL).padding() }
+                    if let displayedDocumentURL {
+                        if documentMode == .pdf { ReceiptPDFView(url: displayedDocumentURL).frame(minWidth: 560, minHeight: 760).padding() }
+                        else { ReceiptStoredImage(url: displayedDocumentURL).padding() }
+                    }
                 }
-                .background(Color.black)
-                .navigationTitle(imageMode.rawValue + " receipt")
+                .background(documentMode == .pdf ? Color.white : Color.black)
+                .navigationTitle(documentMode.rawValue + " receipt")
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showingFullImage = false } } }
             }
         }
     }
+
+    private var documentDescription: String {
+        switch documentMode {
+        case .pdf: "Formatted receipt PDF with store, date, categorized items, totals, and enhanced image"
+        case .cleaned: "Straightened, whitened, and enhanced for easier reading"
+        case .original: "Original imported receipt"
+        }
+    }
 }
 
-private enum ReceiptImageMode: String, CaseIterable, Identifiable {
+private enum ReceiptDocumentMode: String, CaseIterable, Identifiable {
+    case pdf = "PDF"
     case cleaned = "Cleaned"
     case original = "Original"
     var id: String { rawValue }
 }
+
+#if os(iOS)
+private struct ReceiptPDFView: UIViewRepresentable {
+    let url: URL
+    func makeUIView(context: Context) -> PDFView { let view = PDFView(); view.autoScales = true; view.displayMode = .singlePageContinuous; view.displaysPageBreaks = true; return view }
+    func updateUIView(_ view: PDFView, context: Context) { if view.document?.documentURL != url { view.document = PDFDocument(url: url) } }
+}
+#else
+private struct ReceiptPDFView: NSViewRepresentable {
+    let url: URL
+    func makeNSView(context: Context) -> PDFView { let view = PDFView(); view.autoScales = true; view.displayMode = .singlePageContinuous; view.displaysPageBreaks = true; return view }
+    func updateNSView(_ view: PDFView, context: Context) { if view.document?.documentURL != url { view.document = PDFDocument(url: url) } }
+}
+#endif
 
 private struct ReceiptStoredImage: View {
     let url: URL

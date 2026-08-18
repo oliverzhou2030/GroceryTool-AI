@@ -9,13 +9,16 @@ enum ReceiptCleaner {
     private static let quantityPattern = #"^\s*([0-9]+(?:\.[0-9]+)?)\s+(.+)$"#
 
     static func clean(text: String, date suppliedDate: Date? = nil) -> GroceryReceipt {
-        let lines = text.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        let rawLines = text.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        let lines = mergeSplitSummaryLines(rawLines)
         let merchant = merchantName(from: lines)
         var items: [ReceiptItem] = []
         var tax = 0.0
         var discount = 0.0
         var pendingItem: (name: String, quantity: Double)?
-        for line in lines {
+        var consumedItemLines = Set<Int>()
+        for (index, line) in lines.enumerated() {
+            if consumedItemLines.contains(index) { continue }
             let lower = line.lowercased()
             if let match = line.range(of: moneyPattern, options: .regularExpression), let value = moneyValue(in: String(line[match])) {
                 if lower.contains("tax") { tax = value; pendingItem = nil; continue }
@@ -24,13 +27,23 @@ enum ReceiptCleaner {
 
                 let beforePrice = String(line[..<match.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
                 let parsed = itemNameAndQuantity(from: beforePrice) ?? (beforePrice, 1)
-                let item: (name: String, quantity: Double)? = parsed.name.isEmpty ? pendingItem : parsed
+                var item: (name: String, quantity: Double)? = parsed.name.isEmpty ? pendingItem : parsed
+                if parsed.name.isEmpty && item == nil {
+                    for nextIndex in (index + 1)..<min(index + 3, lines.count) {
+                        if let next = itemNameAndQuantity(from: lines[nextIndex]), isLikelyItemName(next.name) {
+                            item = next
+                            consumedItemLines.insert(nextIndex)
+                            break
+                        }
+                    }
+                }
                 if let item, isLikelyPricedItemName(item.name) {
                     let cleanName = cleanedItemName(item.name)
                     items.append(ReceiptItem(name: cleanName, category: category(for: cleanName), quantity: item.quantity, unitPrice: value / max(1, item.quantity), total: value))
                 }
                 pendingItem = nil
-            } else if let parsed = itemNameAndQuantity(from: line), isLikelyItemName(parsed.name) {
+            } else if line.range(of: quantityPattern, options: .regularExpression) != nil,
+                      let parsed = itemNameAndQuantity(from: line), isLikelyItemName(parsed.name) {
                 pendingItem = parsed
             }
         }
@@ -42,7 +55,7 @@ enum ReceiptCleaner {
         if ["kitkat", "kit kat", "chocolate", "chip", "cookie", "candy", "snack", "cracker", "biscuit", "wafer", "gummy", "popcorn"].contains(where: text.contains) { return .snack }
         if ["milk", "cheese", "yogurt", "cream", "reddi wip", "whipped", "butter", "egg"].contains(where: text.contains) { return .dairy }
         if ["mushroom", "enoki", "apple", "banana", "lettuce", "onion", "fruit", "vegetable", "tomato", "potato", "carrot", "broccoli", "spinach", "avocado"].contains(where: text.contains) { return .produce }
-        if ["ramen", "noodle", "rice", "pasta", "sauce", "bamboo shoot", "cereal", "flour", "sugar", "oil"].contains(where: text.contains) { return .pantry }
+        if ["ramen", " rame", "samyang", "noodle", "rice", "pasta", "sauce", "bamboo shoot", "cereal", "flour", "sugar", "oil"].contains(where: text.contains) { return .pantry }
         if ["cola", "soda", "water", "juice", "coffee", "tea", "drink", "beverage"].contains(where: text.contains) { return .beverage }
         if ["bread", "bagel", "muffin", "croissant", "cake", "bakery"].contains(where: text.contains) { return .bakery }
         if ["beef", "chicken", "pork", "fish", "salmon", "shrimp", "turkey", "lamb"].contains(where: text.contains) { return .meat }
@@ -70,8 +83,29 @@ enum ReceiptCleaner {
 
     private static func isLikelyItemName(_ text: String) -> Bool {
         let lower = text.lowercased()
-        let excluded = ["station", "cashier", "subtotal", "total", "item count", "payment", "amount", "auth", "visa", "credit", "change"]
+        let excluded = ["station", "cashier", "subtotal", "total", "tax", "item count", "payment", "amount", "auth", "visa", "credit", "change"]
         return text.count > 2 && text.rangeOfCharacter(from: .letters) != nil && !excluded.contains(where: lower.contains)
+    }
+
+    private static func mergeSplitSummaryLines(_ lines: [String]) -> [String] {
+        let summaryLabels = ["subtotal", "tax", "total", "payment", "amount", "change", "discount"]
+        var merged: [String] = []
+        var index = 0
+        while index < lines.count {
+            let line = lines[index]
+            let lower = line.lowercased()
+            if index + 1 < lines.count,
+               summaryLabels.contains(where: lower.contains),
+               line.range(of: moneyPattern, options: .regularExpression) == nil,
+               lines[index + 1].range(of: moneyPattern, options: .regularExpression) != nil {
+                merged.append(line + " " + lines[index + 1])
+                index += 2
+            } else {
+                merged.append(line)
+                index += 1
+            }
+        }
+        return merged
     }
 
     private static func isLikelyPricedItemName(_ text: String) -> Bool {
@@ -89,7 +123,10 @@ enum ReceiptCleaner {
                 !["station", "cashier", "blvd", "street", "road", "avenue"].contains(where: lower.contains) &&
                 line.range(of: #"\d{1,2}/\d{1,2}/\d{2,4}"#, options: .regularExpression) == nil
         }
-        if candidates.contains(where: { $0.lowercased().contains("jmart") || $0.lowercased().contains("j-mart") }) { return "J-Mart Little Neck" }
+        if candidates.contains(where: {
+            let normalized = $0.lowercased().replacingOccurrences(of: " ", with: "")
+            return normalized.contains("jmart") || normalized.contains("j-mart") || normalized.contains("i-mart") || normalized.contains("/mart")
+        }) { return "J-Mart Little Neck" }
         let storeWords = ["market", "mart", "grocery", "foods", "supermarket", "costco", "walmart", "target", "aldi", "lidl"]
         let result = candidates.first(where: { candidate in storeWords.contains(where: candidate.lowercased().contains) }) ?? candidates.first ?? "Unknown Store"
         return result.lowercased().capitalized

@@ -37,9 +37,9 @@ struct ContentView: View {
     private var mainTabs: some View {
         TabView {
             ReceiptsView().tabItem { Label("Receipts", systemImage: "receipt") }
+            ReceiptCalendarView().tabItem { Label("Calendar", systemImage: "calendar") }
             InsightsView().tabItem { Label("Insights", systemImage: "chart.pie.fill") }
             ShoppingSearchView().tabItem { Label("Shop", systemImage: "magnifyingglass") }
-            PreferencesView().tabItem { Label("Preferences", systemImage: "heart.text.square") }
             SettingsView().tabItem { Label("Settings", systemImage: "gearshape.fill") }
         }
         .background(Color.appBackground)

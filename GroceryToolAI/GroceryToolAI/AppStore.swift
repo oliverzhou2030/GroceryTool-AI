@@ -25,6 +25,7 @@ final class AppStore: ObservableObject {
         isLoading = false
         removeLegacySampleReceipt()
         seedAdminAccount()
+        backfillPDFs()
     }
 
     func add(_ receipt: GroceryReceipt, images: ReceiptImagePair? = nil) {
@@ -42,6 +43,11 @@ final class AppStore: ObservableObject {
                 try? FileManager.default.removeItem(at: imagesDirectory.appendingPathComponent(cleanedName))
             }
         }
+        let pdfName = "\(receipt.id.uuidString)-clean-receipt.pdf"
+        if let pdf = ReceiptPDFRenderer.render(receipt: savedReceipt, cleanedImageData: images?.cleaned) {
+            try? pdf.write(to: imagesDirectory.appendingPathComponent(pdfName), options: .atomic)
+            savedReceipt.pdfFilename = pdfName
+        }
         receipts.insert(savedReceipt, at: 0)
     }
     func imageURL(filename: String?) -> URL? {
@@ -49,6 +55,7 @@ final class AppStore: ObservableObject {
         let url = imagesDirectory.appendingPathComponent(filename)
         return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
+    func documentURL(filename: String?) -> URL? { imageURL(filename: filename) }
     func delete(at offsets: IndexSet) {
         let removed = offsets.map { receipts[$0] }
         removed.forEach(removeImages)
@@ -132,9 +139,23 @@ final class AppStore: ObservableObject {
         }
     }
     private func removeImages(for receipt: GroceryReceipt) {
-        for filename in [receipt.originalImageFilename, receipt.cleanedImageFilename].compactMap({ $0 }) {
+        for filename in [receipt.originalImageFilename, receipt.cleanedImageFilename, receipt.pdfFilename].compactMap({ $0 }) {
             try? FileManager.default.removeItem(at: imagesDirectory.appendingPathComponent(filename))
         }
+    }
+    private func backfillPDFs() {
+        var updated = receipts
+        var changed = false
+        for index in updated.indices where updated[index].pdfFilename == nil {
+            let filename = "\(updated[index].id.uuidString)-clean-receipt.pdf"
+            let cleanedData = imageURL(filename: updated[index].cleanedImageFilename).flatMap { try? Data(contentsOf: $0) }
+            if let pdf = ReceiptPDFRenderer.render(receipt: updated[index], cleanedImageData: cleanedData) {
+                try? pdf.write(to: imagesDirectory.appendingPathComponent(filename), options: .atomic)
+                updated[index].pdfFilename = filename
+                changed = true
+            }
+        }
+        if changed { receipts = updated }
     }
     private static func hash(_ password: String) -> String {
         SHA256.hash(data: Data("GroceryToolAI.local.\(password)".utf8)).map { String(format: "%02x", $0) }.joined()

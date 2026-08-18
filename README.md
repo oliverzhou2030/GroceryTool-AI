@@ -7,11 +7,13 @@ A native iPhone and Mac grocery assistant that turns receipt photos into clean b
 - Apple Vision OCR for receipt photos
 - Automatic receipt orientation, merchant, and purchase-date recognition
 - Private on-device receipt image history with Original and whitened Cleaned views
+- Straightened receipt scans and exportable clean PDFs containing parsed details and the enhanced image
 - Editable clean bills with categorized line items
 - Product-aware default categories plus editable quantity/category fields
 - Local JSON receipt history and preference learning
 - Date-range analytics: total spend, food-to-snack ratio, and store ratios
 - Item-count analytics grouped by grocery category
+- Receipt calendar with per-day history and custom date-range spending totals
 - UTF-8 CSV export for Microsoft Excel and Google Sheets
 - One-store and two-store shopping plans with price, travel time, pros, and cons
 - Similar-product recommendations when a requested brand is unavailable nearby

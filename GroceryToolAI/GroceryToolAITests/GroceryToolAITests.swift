@@ -1,4 +1,5 @@
 import Foundation
+import PDFKit
 import Testing
 @testable import GroceryToolAI
 
@@ -43,11 +44,42 @@ struct GroceryToolAITests {
         #expect(receipt.items.count == 6)
         #expect(receipt.items.first?.category == .snack)
         #expect(receipt.items.first(where: { $0.name.contains("Enoki") })?.category == .produce)
+        #expect(receipt.items.first(where: { $0.name.contains("Samyang") })?.category == .pantry)
         #expect(receipt.items.first(where: { $0.name.contains("Reddi") })?.category == .dairy)
         #expect(receipt.total == 33.88)
         #expect(Calendar.current.component(.year, from: receipt.date) == 2026)
         #expect(Calendar.current.component(.month, from: receipt.date) == 8)
         #expect(Calendar.current.component(.day, from: receipt.date) == 18)
+    }
+
+    @Test func receiptCleanerAssociatesPricePrintedBeforeItem() {
+        let receipt = ReceiptCleaner.clean(text: """
+        /mart
+        I-Mart little Neck
+        08/18/2026 12:21:09
+        $5.99 F
+        1 DS ENOKI MUSHROOMS MALA
+        $4.99 F
+        1 REDDI WIP ORIGINAL CREAMY
+        Subtotal: $10.98
+        Tax: $0.00
+        Total: $10.98
+        """)
+        #expect(receipt.merchant == "J-Mart Little Neck")
+        #expect(receipt.items.count == 2)
+        #expect(receipt.items[0].name.contains("Enoki"))
+        #expect(receipt.items[1].category == .dairy)
+        #expect(receipt.total == 10.98)
+    }
+
+    @Test func cleanReceiptPDFIncludesEveryDetailPage() throws {
+        var receipt = SampleData.receipts[0]
+        receipt.items = (1...31).map {
+            ReceiptItem(name: "Grocery item \($0)", category: .pantry, unitPrice: 1, total: 1)
+        }
+        let pdf = try #require(ReceiptPDFRenderer.render(receipt: receipt, cleanedImageData: nil))
+        #expect(String(decoding: pdf.prefix(4), as: UTF8.self) == "%PDF")
+        #expect(PDFDocument(data: pdf)?.pageCount == 3)
     }
 
     @Test func analyticsFiltersDatesAndComputesRatios() {

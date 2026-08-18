@@ -23,6 +23,12 @@ struct SettingsView: View {
                     Label("The app uses white and light blue in Light mode.", systemImage: "paintpalette.fill")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
+                Section("Learned preferences") {
+                    LabeledContent("Plans selected", value: "\(store.preferences.selectedPlans)")
+                    LabeledContent("Favorite store", value: store.preferences.storeWeights.max(by: { $0.value < $1.value })?.key ?? "Still learning")
+                    Label("Chosen shopping plans automatically improve future store rankings.", systemImage: "heart.text.square")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
                 Section("Current location") {
                     LabeledContent("Permission", value: location.statusText)
                     if let coordinate = location.location?.coordinate {
