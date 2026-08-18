@@ -13,10 +13,13 @@ final class AppStore: ObservableObject {
     @Published var currentUsername: String?
     private var isLoading = true
     private let fileURL: URL
+    private let imagesDirectory: URL
 
     init() {
         let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!.appendingPathComponent("GroceryToolAI", isDirectory: true)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        imagesDirectory = directory.appendingPathComponent("ReceiptImages", isDirectory: true)
+        try? FileManager.default.createDirectory(at: imagesDirectory, withIntermediateDirectories: true)
         fileURL = directory.appendingPathComponent("user-data.json")
         load()
         isLoading = false
@@ -24,9 +27,37 @@ final class AppStore: ObservableObject {
         seedAdminAccount()
     }
 
-    func add(_ receipt: GroceryReceipt) { receipts.insert(receipt, at: 0) }
-    func delete(at offsets: IndexSet) { receipts.remove(atOffsets: offsets) }
-    func delete(id: UUID) { receipts.removeAll { $0.id == id } }
+    func add(_ receipt: GroceryReceipt, images: ReceiptImagePair? = nil) {
+        var savedReceipt = receipt
+        if let images {
+            let originalName = "\(receipt.id.uuidString)-original.jpg"
+            let cleanedName = "\(receipt.id.uuidString)-cleaned.jpg"
+            do {
+                try images.original.write(to: imagesDirectory.appendingPathComponent(originalName), options: .atomic)
+                try images.cleaned.write(to: imagesDirectory.appendingPathComponent(cleanedName), options: .atomic)
+                savedReceipt.originalImageFilename = originalName
+                savedReceipt.cleanedImageFilename = cleanedName
+            } catch {
+                try? FileManager.default.removeItem(at: imagesDirectory.appendingPathComponent(originalName))
+                try? FileManager.default.removeItem(at: imagesDirectory.appendingPathComponent(cleanedName))
+            }
+        }
+        receipts.insert(savedReceipt, at: 0)
+    }
+    func imageURL(filename: String?) -> URL? {
+        guard let filename else { return nil }
+        let url = imagesDirectory.appendingPathComponent(filename)
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+    func delete(at offsets: IndexSet) {
+        let removed = offsets.map { receipts[$0] }
+        removed.forEach(removeImages)
+        receipts.remove(atOffsets: offsets)
+    }
+    func delete(id: UUID) {
+        receipts.filter { $0.id == id }.forEach(removeImages)
+        receipts.removeAll { $0.id == id }
+    }
     func select(_ plan: ShoppingPlan) { preferences.record(plan: plan) }
     func signIn(username: String, password: String) -> Bool {
         let normalized = username.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -98,6 +129,11 @@ final class AppStore: ObservableObject {
             receipt.merchant == "Neighborhood Market" &&
             Set(receipt.items.map(\.name)) == Set(["Whole Milk", "Bananas", "Potato Chips"]) &&
             abs(receipt.tax - 0.32) < 0.001
+        }
+    }
+    private func removeImages(for receipt: GroceryReceipt) {
+        for filename in [receipt.originalImageFilename, receipt.cleanedImageFilename].compactMap({ $0 }) {
+            try? FileManager.default.removeItem(at: imagesDirectory.appendingPathComponent(filename))
         }
     }
     private static func hash(_ password: String) -> String {

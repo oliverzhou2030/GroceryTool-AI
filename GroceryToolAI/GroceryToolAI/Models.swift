@@ -46,6 +46,8 @@ struct GroceryReceipt: Identifiable, Codable, Hashable {
     var tax: Double = 0
     var discount: Double = 0
     var sourceText: String = ""
+    var originalImageFilename: String?
+    var cleanedImageFilename: String?
     var subtotal: Double { items.reduce(0) { $0 + $1.total } }
     var total: Double { max(0, subtotal + tax - discount) }
 }

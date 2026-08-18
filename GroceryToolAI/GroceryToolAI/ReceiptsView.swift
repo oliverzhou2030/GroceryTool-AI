@@ -1,6 +1,11 @@
 import SwiftUI
 import PhotosUI
 import UniformTypeIdentifiers
+#if os(iOS)
+import UIKit
+#elseif os(macOS)
+import AppKit
+#endif
 
 struct ReceiptsView: View {
     @EnvironmentObject private var store: AppStore
@@ -11,6 +16,7 @@ struct ReceiptsView: View {
     @State private var showingManual = false
     @State private var showingFiles = false
     @State private var selectedReceiptID: UUID?
+    @State private var draftImages: ReceiptImagePair?
 
     var body: some View {
         NavigationSplitView {
@@ -36,7 +42,7 @@ struct ReceiptsView: View {
             if let selectedReceipt { ReceiptDetailView(receipt: selectedReceipt) { store.delete(id: selectedReceipt.id); selectedReceiptID = nil } }
             else { ContentUnavailableView("No receipt selected", systemImage: "receipt", description: Text("Import, enter, or select a receipt from history.")) }
         }
-        .sheet(item: $draft) { receipt in ReceiptEditor(receipt: receipt) { store.add($0); draft = nil } }
+        .sheet(item: $draft, onDismiss: { draftImages = nil }) { receipt in ReceiptEditor(receipt: receipt) { store.add($0, images: draftImages); draft = nil; draftImages = nil } }
         .sheet(isPresented: $showingManual) { ReceiptEditor(receipt: GroceryReceipt(merchant: "", date: .now, items: [])) { store.add($0); showingManual = false } }
         .fileImporter(isPresented: $showingFiles, allowedContentTypes: [.image, .pdf], allowsMultipleSelection: true) { result in
             Task { await importFiles(result) }
@@ -60,8 +66,15 @@ struct ReceiptsView: View {
         defer { isReading = false; photoItems = [] }
         do {
             var combined = ""
-            for item in items { if let data = try await item.loadTransferable(type: Data.self) { combined += try await ReceiptOCRService.recognize(imageData: data) + "\n" } }
+            var firstImageData: Data?
+            for item in items {
+                if let data = try await item.loadTransferable(type: Data.self) {
+                    if firstImageData == nil { firstImageData = data }
+                    combined += try await ReceiptOCRService.recognize(imageData: data) + "\n"
+                }
+            }
             guard !combined.isEmpty else { throw CocoaError(.fileReadCorruptFile) }
+            if let firstImageData { draftImages = try ReceiptImageProcessor.prepare(imageData: firstImageData) }
             draft = ReceiptCleaner.clean(text: combined)
         } catch { errorMessage = error.localizedDescription }
     }
@@ -73,12 +86,15 @@ struct ReceiptsView: View {
         do {
             let urls = try result.get()
             var combined = ""
+            var firstImages: ReceiptImagePair?
             for url in urls {
                 let accessed = url.startAccessingSecurityScopedResource()
                 defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+                if firstImages == nil { firstImages = try ReceiptImageProcessor.prepare(fileURL: url) }
                 combined += try await ReceiptOCRService.recognize(fileURL: url) + "\n"
             }
             guard !combined.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw CocoaError(.fileReadCorruptFile) }
+            draftImages = firstImages
             draft = ReceiptCleaner.clean(text: combined)
         } catch { errorMessage = error.localizedDescription }
     }
@@ -90,14 +106,94 @@ private struct ReceiptRow: View {
 }
 
 struct ReceiptDetailView: View {
+    @EnvironmentObject private var store: AppStore
     let receipt: GroceryReceipt
     let onDelete: () -> Void
     @State private var confirmingDelete = false
+    @State private var imageMode = ReceiptImageMode.cleaned
+    @State private var showingFullImage = false
+
+    private var displayedImageURL: URL? {
+        store.imageURL(filename: imageMode == .cleaned ? receipt.cleanedImageFilename : receipt.originalImageFilename)
+    }
+
     var body: some View {
-        List { Section { LabeledContent("Date", value: receipt.date.formatted(date: .abbreviated, time: .omitted)); LabeledContent("Items", value: "\(receipt.items.count)") }; Section("Clean bill") { ForEach(receipt.items) { item in HStack { VStack(alignment: .leading) { Text(item.name); Text(item.category.rawValue).font(.caption).foregroundStyle(.secondary) }; Spacer(); Text(item.total, format: .currency(code: "USD")) } } }; Section { LabeledContent("Subtotal", value: receipt.subtotal.formatted(.currency(code: "USD"))); LabeledContent("Tax", value: receipt.tax.formatted(.currency(code: "USD"))); LabeledContent("Total", value: receipt.total.formatted(.currency(code: "USD"))).fontWeight(.bold) } }
+        List {
+            if receipt.cleanedImageFilename != nil || receipt.originalImageFilename != nil {
+                Section("Receipt image") {
+                    Picker("Image", selection: $imageMode) {
+                        ForEach(ReceiptImageMode.allCases) { Text($0.rawValue).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    if let displayedImageURL {
+                        ReceiptStoredImage(url: displayedImageURL)
+                            .frame(maxWidth: .infinity, minHeight: 260, maxHeight: 520)
+                            .contentShape(Rectangle())
+                            .onTapGesture { showingFullImage = true }
+                        Label(imageMode == .cleaned ? "Whitened and enhanced for easier reading" : "Original imported receipt", systemImage: imageMode == .cleaned ? "wand.and.stars" : "photo")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+            } else {
+                Section("Receipt image") {
+                    Label("No image was saved for this older or manually entered receipt. Re-import the photo to add Original and Cleaned views.", systemImage: "photo.badge.exclamationmark")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+            }
+            Section {
+                LabeledContent("Date", value: receipt.date.formatted(date: .abbreviated, time: .omitted))
+                LabeledContent("Items", value: "\(receipt.items.count)")
+            }
+            Section("Clean bill") {
+                ForEach(receipt.items) { item in
+                    HStack {
+                        VStack(alignment: .leading) { Text(item.name); Text(item.category.rawValue).font(.caption).foregroundStyle(.secondary) }
+                        Spacer()
+                        Text(item.total, format: .currency(code: "USD"))
+                    }
+                }
+            }
+            Section {
+                LabeledContent("Subtotal", value: receipt.subtotal.formatted(.currency(code: "USD")))
+                LabeledContent("Tax", value: receipt.tax.formatted(.currency(code: "USD")))
+                LabeledContent("Total", value: receipt.total.formatted(.currency(code: "USD"))).fontWeight(.bold)
+            }
+        }
         .navigationTitle(receipt.merchant)
         .toolbar { ToolbarItem { Button(role: .destructive) { confirmingDelete = true } label: { Label("Delete receipt", systemImage: "trash") } } }
         .confirmationDialog("Delete this receipt?", isPresented: $confirmingDelete, titleVisibility: .visible) { Button("Delete receipt", role: .destructive, action: onDelete) }
+        .sheet(isPresented: $showingFullImage) {
+            NavigationStack {
+                ScrollView([.horizontal, .vertical]) {
+                    if let displayedImageURL { ReceiptStoredImage(url: displayedImageURL).padding() }
+                }
+                .background(Color.black)
+                .navigationTitle(imageMode.rawValue + " receipt")
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showingFullImage = false } } }
+            }
+        }
+    }
+}
+
+private enum ReceiptImageMode: String, CaseIterable, Identifiable {
+    case cleaned = "Cleaned"
+    case original = "Original"
+    var id: String { rawValue }
+}
+
+private struct ReceiptStoredImage: View {
+    let url: URL
+    var body: some View {
+        Group {
+            #if os(iOS)
+            if let image = UIImage(contentsOfFile: url.path) { Image(uiImage: image).resizable().interpolation(.high).scaledToFit() }
+            else { ContentUnavailableView("Image unavailable", systemImage: "photo.badge.exclamationmark") }
+            #else
+            if let image = NSImage(contentsOf: url) { Image(nsImage: image).resizable().interpolation(.high).scaledToFit() }
+            else { ContentUnavailableView("Image unavailable", systemImage: "photo.badge.exclamationmark") }
+            #endif
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
 
