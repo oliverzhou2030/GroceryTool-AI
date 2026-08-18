@@ -13,6 +13,7 @@ A native iPhone and Mac grocery assistant that turns receipt photos into clean b
 - Local JSON receipt history and preference learning
 - Date-range analytics: total spend, food-to-snack ratio, and store ratios
 - Item-count analytics grouped by grocery category
+- Colorful bar and pie chart modes for food types and market spending
 - Receipt calendar with per-day history and custom date-range spending totals
 - UTF-8 CSV export for Microsoft Excel and Google Sheets
 - One-store and two-store shopping plans with price, travel time, pros, and cons
