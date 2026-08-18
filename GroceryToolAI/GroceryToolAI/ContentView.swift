@@ -24,6 +24,7 @@ struct ContentView: View {
         }
         .tint(Color.appBlue)
         .preferredColorScheme(colorScheme)
+        .environment(\.locale, store.preferences.language.locale)
     }
 
     @ViewBuilder private var authenticatedContent: some View {

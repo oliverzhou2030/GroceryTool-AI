@@ -89,6 +89,8 @@ struct GroceryToolAITests {
         #expect(analytics.receipts.count == 1)
         #expect(analytics.total == 15)
         #expect(analytics.foodSnackRatio == 2)
+        #expect(analytics.categorySpendTotals.first(where: { $0.0 == .dairy })?.1 == 10)
+        #expect(analytics.categorySpendTotals.first(where: { $0.0 == .snack })?.1 == 5)
     }
 
     @Test func spreadsheetContainsExcelCompatibleSummary() {
@@ -124,10 +126,12 @@ struct GroceryToolAITests {
     @Test func categoryCorrectionsPersistAndBecomeDefaults() throws {
         var preferences = UserPreferences()
         preferences.learnCategory(itemName: "Nestle KitKat Green Tea", category: .pantry)
+        preferences.language = .simplifiedChinese
         #expect(preferences.learnedCategory(for: "NESTLE KITKAT GREEN-TEA") == .pantry)
 
         let encoded = try JSONEncoder().encode(preferences)
         let restored = try JSONDecoder().decode(UserPreferences.self, from: encoded)
         #expect(restored.learnedCategory(for: "Nestle KitKat Green Tea") == .pantry)
+        #expect(restored.language == .simplifiedChinese)
     }
 }

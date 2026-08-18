@@ -16,6 +16,7 @@ A native iPhone and Mac grocery assistant that turns receipt photos into clean b
 - Date-range analytics: total spend, food-to-snack ratio, and store ratios
 - Item-count analytics grouped by grocery category
 - Colorful bar and pie chart modes for food types and market spending
+- Food-category spending ratios with both bar and pie chart views
 - Receipt calendar with per-day history and custom date-range spending totals
 - UTF-8 CSV export for Microsoft Excel and Google Sheets
 - One-store and two-store shopping plans with price, travel time, pros, and cons
@@ -23,6 +24,7 @@ A native iPhone and Mac grocery assistant that turns receipt photos into clean b
 - iPhone location permission flow for nearby-store comparisons
 - Local account creation and sign-in, with a seeded `admin` / `admin` demo account
 - White and light-blue design with System, Light, and Dark appearance modes
+- In-app language switching between English, Simplified Chinese, and Spanish
 - Shop star ratings and written reviews that influence recommendations
 - Responsive SwiftUI interface for iPhone and Mac
 

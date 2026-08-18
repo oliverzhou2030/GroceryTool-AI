@@ -20,6 +20,12 @@ struct InsightsView: View {
             StoreChartDatum(store: $0.element.0, amount: $0.element.1, color: InsightPalette.colors[$0.offset % InsightPalette.colors.count])
         }
     }
+    private var categorySpendData: [CategorySpendChartDatum] {
+        analytics.categorySpendTotals.enumerated().map {
+            CategorySpendChartDatum(category: $0.element.0, amount: $0.element.1, color: InsightPalette.colors[$0.offset % InsightPalette.colors.count])
+        }
+    }
+    private var categorizedSpendTotal: Double { categorySpendData.reduce(0) { $0 + $1.amount } }
 
     var body: some View {
         NavigationStack {
@@ -29,6 +35,7 @@ struct InsightsView: View {
                     metrics
                     chartStylePicker
                     categoryChart
+                    categorySpendChart
                     storeChart
                     Text("CSV files open directly in Microsoft Excel and import into Google Sheets.")
                         .font(.footnote)
@@ -74,7 +81,7 @@ struct InsightsView: View {
             Label("Chart style", systemImage: "chart.pie.fill").font(.headline)
             Picker("Chart style", selection: $chartStyle) {
                 ForEach(InsightChartStyle.allCases) { style in
-                    Label(style.rawValue, systemImage: style.icon).tag(style)
+                    Label(style.title, systemImage: style.icon).tag(style)
                 }
             }
             .pickerStyle(.segmented)
@@ -104,10 +111,10 @@ struct InsightsView: View {
                     }
                 }
                 .frame(height: 280)
-                chartLegend(categoryData.map { ($0.category.rawValue, $0.color) })
+                chartLegend(categoryData.map { (categoryName($0.category), $0.color) })
             } else {
                 Chart(categoryData) { datum in
-                    BarMark(x: .value("Items", datum.count), y: .value("Category", datum.category.rawValue))
+                    BarMark(x: .value("Items", datum.count), y: .value("Category", categoryName(datum.category)))
                         .foregroundStyle(datum.color.gradient)
                         .cornerRadius(6)
                         .annotation(position: .trailing) { chartNumber("\(datum.count)") }
@@ -151,6 +158,40 @@ struct InsightsView: View {
         }
     }
 
+    private var categorySpendChart: some View {
+        InsightChartCard(title: "Food spending", subtitle: "Share of item spending by food type", icon: "dollarsign.circle.fill") {
+            if categorySpendData.isEmpty {
+                emptyChart
+            } else if chartStyle == .pie {
+                Chart(categorySpendData) { datum in
+                    SectorMark(
+                        angle: .value("Spend", datum.amount),
+                        innerRadius: .ratio(0.5),
+                        angularInset: 2
+                    )
+                    .cornerRadius(5)
+                    .foregroundStyle(datum.color.gradient)
+                    .annotation(position: .overlay) {
+                        Text(categoryPercent(for: datum.amount))
+                            .font(.system(.caption2, design: .rounded, weight: .bold))
+                            .monospacedDigit()
+                            .foregroundStyle(.white)
+                    }
+                }
+                .frame(height: 280)
+                chartLegend(categorySpendData.map { (categoryName($0.category), $0.color) })
+            } else {
+                Chart(categorySpendData) { datum in
+                    BarMark(x: .value("Spend", datum.amount), y: .value("Category", categoryName(datum.category)))
+                        .foregroundStyle(datum.color.gradient)
+                        .cornerRadius(6)
+                        .annotation(position: .trailing) { chartNumber(categoryPercent(for: datum.amount)) }
+                }
+                .frame(height: max(210, CGFloat(categorySpendData.count * 48)))
+            }
+        }
+    }
+
     private var emptyChart: some View {
         ContentUnavailableView("No receipt data", systemImage: "chart.pie", description: Text("Choose a wider date range or add a receipt."))
             .frame(height: 210)
@@ -158,6 +199,42 @@ struct InsightsView: View {
 
     private func percent(for amount: Double) -> String {
         analytics.total == 0 ? "0%" : (amount / analytics.total).formatted(.percent.precision(.fractionLength(0)))
+    }
+
+    private func categoryPercent(for amount: Double) -> String {
+        categorizedSpendTotal == 0 ? "0%" : (amount / categorizedSpendTotal).formatted(.percent.precision(.fractionLength(0)))
+    }
+
+    private func categoryName(_ category: GroceryCategory) -> String {
+        switch store.preferences.language {
+        case .english: category.rawValue
+        case .simplifiedChinese:
+            switch category {
+            case .produce: "蔬果"
+            case .dairy: "乳制品"
+            case .meat: "肉类"
+            case .pantry: "食品杂货"
+            case .frozen: "冷冻食品"
+            case .bakery: "烘焙食品"
+            case .beverage: "饮料"
+            case .snack: "零食"
+            case .household: "家居用品"
+            case .other: "其他"
+            }
+        case .spanish:
+            switch category {
+            case .produce: "Frutas y verduras"
+            case .dairy: "Lácteos"
+            case .meat: "Carne"
+            case .pantry: "Despensa"
+            case .frozen: "Congelados"
+            case .bakery: "Panadería"
+            case .beverage: "Bebidas"
+            case .snack: "Aperitivos"
+            case .household: "Hogar"
+            case .other: "Otros"
+            }
+        }
     }
 
     private func chartNumber(_ value: String) -> some View {
@@ -180,9 +257,9 @@ struct InsightsView: View {
 }
 
 private enum InsightChartStyle: String, CaseIterable, Identifiable {
-    case bar = "Bar"
-    case pie = "Pie"
+    case bar, pie
     var id: String { rawValue }
+    var title: LocalizedStringKey { self == .bar ? "Bar" : "Pie" }
     var icon: String { self == .bar ? "chart.bar.fill" : "chart.pie.fill" }
 }
 
@@ -200,17 +277,24 @@ private struct StoreChartDatum: Identifiable {
     var id: String { store }
 }
 
+private struct CategorySpendChartDatum: Identifiable {
+    let category: GroceryCategory
+    let amount: Double
+    let color: Color
+    var id: GroceryCategory { category }
+}
+
 private enum InsightPalette {
     static let colors: [Color] = [.blue, .mint, .orange, .purple, .pink, .cyan, .green, .indigo, .yellow, .teal]
 }
 
 private struct InsightChartCard<Content: View>: View {
-    let title: String
-    let subtitle: String
+    let title: LocalizedStringKey
+    let subtitle: LocalizedStringKey
     let icon: String
     let content: Content
 
-    init(title: String, subtitle: String, icon: String, @ViewBuilder content: () -> Content) {
+    init(title: LocalizedStringKey, subtitle: LocalizedStringKey, icon: String, @ViewBuilder content: () -> Content) {
         self.title = title
         self.subtitle = subtitle
         self.icon = icon
@@ -239,7 +323,7 @@ private struct InsightChartCard<Content: View>: View {
 }
 
 private struct MetricCard: View {
-    let title: String
+    let title: LocalizedStringKey
     let value: String
     let icon: String
     let accent: Color

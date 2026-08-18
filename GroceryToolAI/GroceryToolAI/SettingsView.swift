@@ -23,6 +23,15 @@ struct SettingsView: View {
                     Label("The app uses white and light blue in Light mode.", systemImage: "paintpalette.fill")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
+                Section("Language") {
+                    Picker("App language", selection: $store.preferences.language) {
+                        ForEach(AppLanguage.allCases) { language in
+                            Text(language.displayName).tag(language)
+                        }
+                    }
+                    Label("Language changes apply immediately.", systemImage: "globe")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
                 Section("Learned preferences") {
                     LabeledContent("Plans selected", value: "\(store.preferences.selectedPlans)")
                     LabeledContent("Favorite store", value: store.preferences.storeWeights.max(by: { $0.value < $1.value })?.key ?? "Still learning")
