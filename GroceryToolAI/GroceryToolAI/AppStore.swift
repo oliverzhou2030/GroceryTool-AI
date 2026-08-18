@@ -20,12 +20,13 @@ final class AppStore: ObservableObject {
         fileURL = directory.appendingPathComponent("user-data.json")
         load()
         isLoading = false
+        removeLegacySampleReceipt()
         seedAdminAccount()
-        if receipts.isEmpty { receipts = SampleData.receipts }
     }
 
     func add(_ receipt: GroceryReceipt) { receipts.insert(receipt, at: 0) }
     func delete(at offsets: IndexSet) { receipts.remove(atOffsets: offsets) }
+    func delete(id: UUID) { receipts.removeAll { $0.id == id } }
     func select(_ plan: ShoppingPlan) { preferences.record(plan: plan) }
     func signIn(username: String, password: String) -> Bool {
         let normalized = username.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -91,6 +92,13 @@ final class AppStore: ObservableObject {
     private func seedAdminAccount() {
         guard !accounts.contains(where: { $0.username.lowercased() == "admin" }) else { return }
         accounts.append(LocalAccount(username: "admin", displayName: "Admin", passwordHash: Self.hash("admin")))
+    }
+    private func removeLegacySampleReceipt() {
+        receipts.removeAll { receipt in
+            receipt.merchant == "Neighborhood Market" &&
+            Set(receipt.items.map(\.name)) == Set(["Whole Milk", "Bananas", "Potato Chips"]) &&
+            abs(receipt.tax - 0.32) < 0.001
+        }
     }
     private static func hash(_ password: String) -> String {
         SHA256.hash(data: Data("GroceryToolAI.local.\(password)".utf8)).map { String(format: "%02x", $0) }.joined()

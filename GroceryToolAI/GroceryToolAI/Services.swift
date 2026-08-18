@@ -1,7 +1,8 @@
 import Foundation
-import Vision
+@preconcurrency import Vision
 import CoreGraphics
 import ImageIO
+import PDFKit
 
 enum ReceiptCleaner {
     private static let moneyPattern = #"(?:\$\s*)?([0-9]+(?:\.[0-9]{2}))\s*$"#
@@ -42,6 +43,23 @@ enum ReceiptOCRService {
     static func recognize(imageData: Data) async throws -> String {
         guard let source = CGImageSourceCreateWithData(imageData as CFData, nil),
               let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { throw CocoaError(.fileReadCorruptFile) }
+        return try await recognize(cgImage: image)
+    }
+
+    static func recognize(fileURL: URL) async throws -> String {
+        if fileURL.pathExtension.lowercased() == "pdf" {
+            guard let document = PDFDocument(url: fileURL), document.pageCount > 0 else { throw CocoaError(.fileReadCorruptFile) }
+            var text = ""
+            for index in 0..<document.pageCount {
+                guard let page = document.page(at: index), let image = render(page: page) else { continue }
+                text += try await recognize(cgImage: image) + "\n"
+            }
+            return text
+        }
+        return try await recognize(imageData: Data(contentsOf: fileURL))
+    }
+
+    private static func recognize(cgImage image: CGImage) async throws -> String {
         return try await withCheckedThrowingContinuation { continuation in
             let request = VNRecognizeTextRequest { request, error in
                 if let error { continuation.resume(throwing: error); return }
@@ -55,6 +73,19 @@ enum ReceiptOCRService {
                 catch { continuation.resume(throwing: error) }
             }
         }
+    }
+
+    private static func render(page: PDFPage) -> CGImage? {
+        let bounds = page.bounds(for: .mediaBox)
+        let scale = 2.0
+        let width = max(1, Int(bounds.width * scale))
+        let height = max(1, Int(bounds.height * scale))
+        guard let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        context.setFillColor(CGColor(gray: 1, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        context.scaleBy(x: scale, y: scale)
+        page.draw(with: .mediaBox, to: context)
+        return context.makeImage()
     }
 }
 
@@ -80,7 +111,7 @@ enum SpreadsheetExporter {
         for (store, amount) in analytics.storeTotals { rows.append(["", "STORE RATIO", store, "", "", "", "", String(format: "%.2f%%", analytics.total == 0 ? 0 : amount / analytics.total * 100)]) }
         return rows.map { $0.map(escape).joined(separator: ",") }.joined(separator: "\n")
     }
-    private static func escape(_ value: String) -> String { "\"\(value.replacingOccurrences(of: "\"", with: "\"\""))\"" }
+    nonisolated private static func escape(_ value: String) -> String { "\"\(value.replacingOccurrences(of: "\"", with: "\"\""))\"" }
 }
 
 enum ShoppingPlanner {
