@@ -110,7 +110,7 @@ struct ReceiptEditor: View {
             Form {
                 Section("Receipt") { TextField("Store", text: $receipt.merchant); DatePicker("Date", selection: $receipt.date, displayedComponents: .date) }
                 Section("Items") {
-                    ForEach($receipt.items) { $item in HStack { TextField("Item", text: $item.name); Picker("Category", selection: $item.category) { ForEach(GroceryCategory.allCases) { Text($0.rawValue).tag($0) } }.labelsHidden(); TextField("Price", value: $item.total, format: .number.precision(.fractionLength(2))).frame(width: 80) } }
+                    ForEach($receipt.items) { $item in HStack { TextField("Item", text: $item.name); TextField("Qty", value: $item.quantity, format: .number).frame(width: 48); Picker("Category", selection: $item.category) { ForEach(GroceryCategory.allCases) { Text($0.rawValue).tag($0) } }.labelsHidden(); TextField("Price", value: $item.total, format: .number.precision(.fractionLength(2))).frame(width: 80) } }
                     .onDelete { receipt.items.remove(atOffsets: $0) }
                     Button("Add item", systemImage: "plus") { receipt.items.append(ReceiptItem(name: "", category: .other, unitPrice: 0, total: 0)) }
                 }

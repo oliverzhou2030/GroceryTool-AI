@@ -117,6 +117,11 @@ struct SpendingAnalytics {
     var snackSpend: Double { lineItems.filter { $0.category == .snack }.reduce(0) { $0 + $1.total } }
     var lineItems: [ReceiptItem] { receipts.flatMap(\.items) }
     var foodSnackRatio: Double { snackSpend == 0 ? foodSpend : foodSpend / snackSpend }
+    var categoryItemCounts: [(GroceryCategory, Int)] {
+        Dictionary(grouping: lineItems, by: \.category).map { ($0.key, $0.value.count) }.sorted { lhs, rhs in
+            lhs.1 == rhs.1 ? lhs.0.rawValue < rhs.0.rawValue : lhs.1 > rhs.1
+        }
+    }
     var storeTotals: [(String, Double)] {
         Dictionary(grouping: receipts, by: \.merchant).map { ($0.key, $0.value.reduce(0) { $0 + $1.total }) }.sorted { $0.1 > $1.1 }
     }

@@ -19,6 +19,37 @@ struct GroceryToolAITests {
         #expect(receipt.items.last?.category == .snack)
     }
 
+    @Test func jMartReceiptExtractsStoreDateWrappedItemsAndCategories() {
+        let text = """
+        Jmart
+        J-Mart little Neck
+        249-26 Northern Blvd
+        08/18/2026 12:21:09
+        1 NESTLE KITKAT GREEN TEA EXT $4.99 FT
+        1 CRISPY BAMBOO SHOOTS PEPPER $5.99 F
+        1 SHOU LONG KAN INST VEGELLI $3.49 F
+        1 DS ENOKI MUSHROOMS MALA
+        $5.99 F
+        1 SAMYANG 2X HOT CHICKEN RAME $7.99 F
+        1 REDDI WIP ORIGINAL CREAMY
+        $4.99 F
+        Item Count: 6
+        Subtotal: $33.44
+        Tax: $0.44
+        Total: $33.88
+        """
+        let receipt = ReceiptCleaner.clean(text: text)
+        #expect(receipt.merchant == "J-Mart Little Neck")
+        #expect(receipt.items.count == 6)
+        #expect(receipt.items.first?.category == .snack)
+        #expect(receipt.items.first(where: { $0.name.contains("Enoki") })?.category == .produce)
+        #expect(receipt.items.first(where: { $0.name.contains("Reddi") })?.category == .dairy)
+        #expect(receipt.total == 33.88)
+        #expect(Calendar.current.component(.year, from: receipt.date) == 2026)
+        #expect(Calendar.current.component(.month, from: receipt.date) == 8)
+        #expect(Calendar.current.component(.day, from: receipt.date) == 18)
+    }
+
     @Test func analyticsFiltersDatesAndComputesRatios() {
         let old = GroceryReceipt(merchant: "Old", date: .distantPast, items: [ReceiptItem(name: "Chips", category: .snack, unitPrice: 5, total: 5)])
         let recent = GroceryReceipt(merchant: "Fresh", date: .now, items: [ReceiptItem(name: "Milk", category: .dairy, unitPrice: 10, total: 10), ReceiptItem(name: "Chips", category: .snack, unitPrice: 5, total: 5)])

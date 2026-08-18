@@ -5,37 +5,111 @@ import ImageIO
 import PDFKit
 
 enum ReceiptCleaner {
-    private static let moneyPattern = #"(?:\$\s*)?([0-9]+(?:\.[0-9]{2}))\s*$"#
+    private static let moneyPattern = #"(?i)(?:\$|S)?\s*([0-9]+[\.,][0-9]{2})(?:\s*[A-Z]{1,3})?\s*$"#
+    private static let quantityPattern = #"^\s*([0-9]+(?:\.[0-9]+)?)\s+(.+)$"#
 
-    static func clean(text: String, date: Date = .now) -> GroceryReceipt {
+    static func clean(text: String, date suppliedDate: Date? = nil) -> GroceryReceipt {
         let lines = text.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-        let merchant = lines.first(where: { $0.rangeOfCharacter(from: .letters) != nil }) ?? "Unknown Store"
+        let merchant = merchantName(from: lines)
         var items: [ReceiptItem] = []
         var tax = 0.0
         var discount = 0.0
+        var pendingItem: (name: String, quantity: Double)?
         for line in lines {
-            guard let match = line.range(of: moneyPattern, options: .regularExpression),
-                  let value = Double(line[match].replacingOccurrences(of: "$", with: "").trimmingCharacters(in: .whitespaces)) else { continue }
             let lower = line.lowercased()
-            if lower.contains("tax") { tax = value; continue }
-            if lower.contains("discount") || lower.contains("coupon") || lower.contains("saving") { discount += value; continue }
-            if lower.contains("total") || lower.contains("subtotal") || lower.contains("change") || lower.contains("cash") { continue }
-            let name = String(line[..<match.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
-            guard name.count > 1 else { continue }
-            items.append(ReceiptItem(name: name.capitalized, category: category(for: name), unitPrice: value, total: value))
+            if let match = line.range(of: moneyPattern, options: .regularExpression), let value = moneyValue(in: String(line[match])) {
+                if lower.contains("tax") { tax = value; pendingItem = nil; continue }
+                if lower.contains("discount") || lower.contains("coupon") || lower.contains("saving") { discount += value; pendingItem = nil; continue }
+                if lower.contains("total") || lower.contains("subtotal") || lower.contains("change") || lower.contains("payment") || lower.contains("amount") { pendingItem = nil; continue }
+
+                let beforePrice = String(line[..<match.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
+                let parsed = itemNameAndQuantity(from: beforePrice) ?? (beforePrice, 1)
+                let item: (name: String, quantity: Double)? = parsed.name.isEmpty ? pendingItem : parsed
+                if let item, isLikelyPricedItemName(item.name) {
+                    let cleanName = cleanedItemName(item.name)
+                    items.append(ReceiptItem(name: cleanName, category: category(for: cleanName), quantity: item.quantity, unitPrice: value / max(1, item.quantity), total: value))
+                }
+                pendingItem = nil
+            } else if let parsed = itemNameAndQuantity(from: line), isLikelyItemName(parsed.name) {
+                pendingItem = parsed
+            }
         }
-        return GroceryReceipt(merchant: merchant.capitalized, date: date, items: items, tax: tax, discount: discount, sourceText: text)
+        return GroceryReceipt(merchant: merchant, date: suppliedDate ?? receiptDate(from: text) ?? .now, items: items, tax: tax, discount: discount, sourceText: text)
     }
 
     static func category(for name: String) -> GroceryCategory {
         let text = name.lowercased()
-        if ["chip", "cookie", "candy", "snack", "cracker"].contains(where: text.contains) { return .snack }
-        if ["milk", "cheese", "yogurt", "cream"].contains(where: text.contains) { return .dairy }
-        if ["apple", "banana", "lettuce", "onion", "fruit", "vegetable"].contains(where: text.contains) { return .produce }
-        if ["cola", "soda", "water", "juice", "coffee", "tea"].contains(where: text.contains) { return .beverage }
-        if ["bread", "bagel", "muffin"].contains(where: text.contains) { return .bakery }
-        if ["beef", "chicken", "pork", "fish"].contains(where: text.contains) { return .meat }
+        if ["kitkat", "kit kat", "chocolate", "chip", "cookie", "candy", "snack", "cracker", "biscuit", "wafer", "gummy", "popcorn"].contains(where: text.contains) { return .snack }
+        if ["milk", "cheese", "yogurt", "cream", "reddi wip", "whipped", "butter", "egg"].contains(where: text.contains) { return .dairy }
+        if ["mushroom", "enoki", "apple", "banana", "lettuce", "onion", "fruit", "vegetable", "tomato", "potato", "carrot", "broccoli", "spinach", "avocado"].contains(where: text.contains) { return .produce }
+        if ["ramen", "noodle", "rice", "pasta", "sauce", "bamboo shoot", "cereal", "flour", "sugar", "oil"].contains(where: text.contains) { return .pantry }
+        if ["cola", "soda", "water", "juice", "coffee", "tea", "drink", "beverage"].contains(where: text.contains) { return .beverage }
+        if ["bread", "bagel", "muffin", "croissant", "cake", "bakery"].contains(where: text.contains) { return .bakery }
+        if ["beef", "chicken", "pork", "fish", "salmon", "shrimp", "turkey", "lamb"].contains(where: text.contains) { return .meat }
+        if ["frozen", "ice cream", "pizza"].contains(where: text.contains) { return .frozen }
+        if ["soap", "detergent", "tissue", "paper towel", "cleaner", "trash bag", "shampoo"].contains(where: text.contains) { return .household }
         return .pantry
+    }
+
+    private static func moneyValue(in text: String) -> Double? {
+        let normalized = text.replacingOccurrences(of: "$", with: "").replacingOccurrences(of: "S", with: "").replacingOccurrences(of: "s", with: "").replacingOccurrences(of: ",", with: ".")
+        return normalized.split(whereSeparator: { !$0.isNumber && $0 != "." }).compactMap { Double($0) }.first
+    }
+
+    private static func itemNameAndQuantity(from text: String) -> (name: String, quantity: Double)? {
+        guard let range = text.range(of: quantityPattern, options: .regularExpression) else { return text.isEmpty ? nil : (text, 1) }
+        let matched = String(text[range])
+        let pieces = matched.split(maxSplits: 1, whereSeparator: \.isWhitespace)
+        guard pieces.count == 2, let quantity = Double(pieces[0]) else { return (text, 1) }
+        return (String(pieces[1]), quantity)
+    }
+
+    private static func cleanedItemName(_ text: String) -> String {
+        text.replacingOccurrences(of: #"^[#*\-\s]+|[#*\-\s]+$"#, with: "", options: .regularExpression).lowercased().capitalized
+    }
+
+    private static func isLikelyItemName(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        let excluded = ["station", "cashier", "subtotal", "total", "item count", "payment", "amount", "auth", "visa", "credit", "change"]
+        return text.count > 2 && text.rangeOfCharacter(from: .letters) != nil && !excluded.contains(where: lower.contains)
+    }
+
+    private static func isLikelyPricedItemName(_ text: String) -> Bool {
+        guard isLikelyItemName(text), !text.contains("/"), !text.contains("\\"), !text.contains("%") else { return false }
+        let words = text.split(whereSeparator: \.isWhitespace)
+        if words.count >= 2 { return true }
+        guard let word = words.first, word.count >= 4 else { return false }
+        return word.allSatisfy { $0.isLetter || $0 == "-" }
+    }
+
+    private static func merchantName(from lines: [String]) -> String {
+        let candidates = lines.prefix(10).filter { line in
+            let lower = line.lowercased()
+            return line.rangeOfCharacter(from: .letters) != nil &&
+                !["station", "cashier", "blvd", "street", "road", "avenue"].contains(where: lower.contains) &&
+                line.range(of: #"\d{1,2}/\d{1,2}/\d{2,4}"#, options: .regularExpression) == nil
+        }
+        if candidates.contains(where: { $0.lowercased().contains("jmart") || $0.lowercased().contains("j-mart") }) { return "J-Mart Little Neck" }
+        let storeWords = ["market", "mart", "grocery", "foods", "supermarket", "costco", "walmart", "target", "aldi", "lidl"]
+        let result = candidates.first(where: { candidate in storeWords.contains(where: candidate.lowercased().contains) }) ?? candidates.first ?? "Unknown Store"
+        return result.lowercased().capitalized
+    }
+
+    private static func receiptDate(from text: String) -> Date? {
+        let patterns = [#"\b\d{1,2}/\d{1,2}/\d{4}\s+\d{1,2}:\d{2}(?::\d{2})?\b"#, #"\b\d{1,2}/\d{1,2}/\d{4}\b"#, #"\b\d{4}-\d{1,2}-\d{1,2}\b"#]
+        let formats = ["MM/dd/yyyy HH:mm:ss", "MM/dd/yyyy HH:mm", "MM/dd/yyyy", "yyyy-MM-dd"]
+        for pattern in patterns {
+            guard let range = text.range(of: pattern, options: .regularExpression) else { continue }
+            let value = String(text[range])
+            for format in formats {
+                let formatter = DateFormatter()
+                formatter.locale = Locale(identifier: "en_US_POSIX")
+                formatter.timeZone = .current
+                formatter.dateFormat = format
+                if let date = formatter.date(from: value) { return date }
+            }
+        }
+        return nil
     }
 }
 
@@ -43,7 +117,10 @@ enum ReceiptOCRService {
     static func recognize(imageData: Data) async throws -> String {
         guard let source = CGImageSourceCreateWithData(imageData as CFData, nil),
               let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { throw CocoaError(.fileReadCorruptFile) }
-        return try await recognize(cgImage: image)
+        let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
+        let rawOrientation = (properties?[kCGImagePropertyOrientation] as? NSNumber)?.uint32Value ?? 1
+        let orientation = CGImagePropertyOrientation(rawValue: rawOrientation) ?? .up
+        return try await recognize(cgImage: image, orientation: orientation)
     }
 
     static func recognize(fileURL: URL) async throws -> String {
@@ -52,14 +129,14 @@ enum ReceiptOCRService {
             var text = ""
             for index in 0..<document.pageCount {
                 guard let page = document.page(at: index), let image = render(page: page) else { continue }
-                text += try await recognize(cgImage: image) + "\n"
+                text += try await recognize(cgImage: image, orientation: .up) + "\n"
             }
             return text
         }
         return try await recognize(imageData: Data(contentsOf: fileURL))
     }
 
-    private static func recognize(cgImage image: CGImage) async throws -> String {
+    private static func recognize(cgImage image: CGImage, orientation: CGImagePropertyOrientation) async throws -> String {
         return try await withCheckedThrowingContinuation { continuation in
             let request = VNRecognizeTextRequest { request, error in
                 if let error { continuation.resume(throwing: error); return }
@@ -68,8 +145,11 @@ enum ReceiptOCRService {
             }
             request.recognitionLevel = .accurate
             request.usesLanguageCorrection = true
+            request.recognitionLanguages = ["en-US", "zh-Hans", "zh-Hant"]
+            request.customWords = ["J-Mart", "KITKAT", "ENOKI", "SAMYANG", "REDDI WIP"]
+            request.minimumTextHeight = 0.006
             DispatchQueue.global(qos: .userInitiated).async {
-                do { try VNImageRequestHandler(cgImage: image).perform([request]) }
+                do { try VNImageRequestHandler(cgImage: image, orientation: orientation).perform([request]) }
                 catch { continuation.resume(throwing: error) }
             }
         }
