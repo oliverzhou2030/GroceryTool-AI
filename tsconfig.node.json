@@ -1,4 +1,0 @@
-{
-  "compilerOptions": {"noEmit":true,"skipLibCheck":true,"module":"NodeNext","moduleResolution":"NodeNext","allowSyntheticDefaultImports":true,"strict":true,"target":"ES2022","types":["node"]},
-  "include": ["vite.config.ts", "server"]
-}

@@ -1,38 +1,30 @@
-# Market Ledger
+# GroceryTool AI — SwiftUI
 
-Market Ledger turns grocery receipt images or PDFs into an editable, consolidated bill. Server-side OCR reads each receipt, then DeepSeek structures merchants, dates, line items, categories, quantities, prices, discounts, tax, and totals.
+A native iPhone and Mac grocery assistant that turns receipt photos into clean bills, tracks spending, exports spreadsheet-ready records, compares multi-store shopping plans, recommends nearby substitutes, and learns store preferences on-device.
 
 ## Features
 
-- Upload up to 20 receipt images or PDFs at once
-- Structured receipt extraction with confidence and review warnings
-- Edit, add, and remove every line item
-- Consolidated subtotal, tax, discounts, and grand total
-- Export a CSV or print/save the finished bill as PDF
-- API keys stay on the server and uploaded files are processed in memory
+- Apple Vision OCR for receipt photos
+- Editable clean bills with categorized line items
+- Local JSON receipt history and preference learning
+- Date-range analytics: total spend, food-to-snack ratio, and store ratios
+- UTF-8 CSV export for Microsoft Excel and Google Sheets
+- One-store and two-store shopping plans with price, travel time, pros, and cons
+- Similar-product recommendations when a requested brand is unavailable nearby
+- Universal SwiftUI interface for iPhone and Mac
 
-## Run locally
+## Open and run
 
-Requires Node.js 20+ and a DeepSeek API key.
+1. Open `GroceryToolAI/GroceryToolAI.xcodeproj` in Xcode 26 or newer.
+2. Select `GroceryToolAI` and choose My Mac or an iPhone simulator.
+3. Press Run.
 
-```bash
-npm install
-cp .env.example .env
-# Add your DEEPSEEK_API_KEY to .env
-npm run dev
-```
+The sample store catalog is local and editable in `AppStore.swift`. Real-time retailer inventory requires retailer-specific APIs; see **External APIs**.
 
-Open http://localhost:5173. The API runs on port 8787.
+## External APIs needed for live inventory
 
-## Production
+- A retailer product/inventory API (for example Kroger Developer APIs, Walmart Marketplace APIs when eligible, or another licensed catalog provider).
+- Apple MapKit can provide nearby-store search and routing after enabling the location capability; it does not provide product inventory.
+- An optional LLM API can improve noisy OCR parsing, but the included cleaner works offline and sends no receipt data to third parties.
 
-```bash
-npm run build
-npm start
-```
-
-The server serves the built app from `dist/`. Set `PORT`, `DEEPSEEK_API_KEY`, and optionally `DEEPSEEK_MODEL` in your hosting environment.
-
-## Privacy
-
-Receipts are held in memory only long enough to send them for extraction. This starter does not include user accounts or persistent storage. Review extracted values before using them for reimbursement, accounting, or tax purposes.
+Never commit API keys. Store production credentials in Keychain or retrieve short-lived tokens from a backend.
