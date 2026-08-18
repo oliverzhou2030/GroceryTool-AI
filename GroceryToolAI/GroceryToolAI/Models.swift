@@ -92,25 +92,40 @@ struct ShoppingPlan: Identifiable, Hashable {
 struct UserPreferences: Codable, Equatable {
     var storeWeights: [String: Double] = [:]
     var categorySpend: [GroceryCategory: Double] = [:]
+    var categoryOverrides: [String: GroceryCategory] = [:]
     var selectedPlans: Int = 0
     var theme: AppTheme = .system
-    init(storeWeights: [String: Double] = [:], categorySpend: [GroceryCategory: Double] = [:], selectedPlans: Int = 0, theme: AppTheme = .system) {
+    init(storeWeights: [String: Double] = [:], categorySpend: [GroceryCategory: Double] = [:], categoryOverrides: [String: GroceryCategory] = [:], selectedPlans: Int = 0, theme: AppTheme = .system) {
         self.storeWeights = storeWeights
         self.categorySpend = categorySpend
+        self.categoryOverrides = categoryOverrides
         self.selectedPlans = selectedPlans
         self.theme = theme
     }
-    private enum CodingKeys: String, CodingKey { case storeWeights, categorySpend, selectedPlans, theme }
+    private enum CodingKeys: String, CodingKey { case storeWeights, categorySpend, categoryOverrides, selectedPlans, theme }
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         storeWeights = try container.decodeIfPresent([String: Double].self, forKey: .storeWeights) ?? [:]
         categorySpend = try container.decodeIfPresent([GroceryCategory: Double].self, forKey: .categorySpend) ?? [:]
+        categoryOverrides = try container.decodeIfPresent([String: GroceryCategory].self, forKey: .categoryOverrides) ?? [:]
         selectedPlans = try container.decodeIfPresent(Int.self, forKey: .selectedPlans) ?? 0
         theme = try container.decodeIfPresent(AppTheme.self, forKey: .theme) ?? .system
     }
     mutating func record(plan: ShoppingPlan) {
         selectedPlans += 1
         for stop in plan.stops { storeWeights[stop.store.name, default: 0] += 1 }
+    }
+    mutating func learnCategory(itemName: String, category: GroceryCategory) {
+        categoryOverrides[Self.normalizedItemName(itemName)] = category
+    }
+    func learnedCategory(for itemName: String) -> GroceryCategory? {
+        categoryOverrides[Self.normalizedItemName(itemName)]
+    }
+    private static func normalizedItemName(_ name: String) -> String {
+        name.lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
     }
 }
 

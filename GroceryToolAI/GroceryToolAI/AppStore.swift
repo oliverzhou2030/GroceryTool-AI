@@ -29,7 +29,8 @@ final class AppStore: ObservableObject {
         upgradeReceiptDocuments()
     }
 
-    func add(_ receipt: GroceryReceipt, images: ReceiptImagePair? = nil) {
+    func add(_ receipt: GroceryReceipt, images: ReceiptImagePair? = nil, learningFrom recognizedReceipt: GroceryReceipt? = nil) {
+        if let recognizedReceipt { learnCategoryCorrections(from: recognizedReceipt, to: receipt) }
         var savedReceipt = receipt
         if let images {
             let originalName = "\(receipt.id.uuidString)-original.jpg"
@@ -51,6 +52,15 @@ final class AppStore: ObservableObject {
         }
         savedReceipt.documentProcessingVersion = Self.documentProcessingVersion
         receipts.insert(savedReceipt, at: 0)
+    }
+    func applyLearnedCategories(to receipt: GroceryReceipt) -> GroceryReceipt {
+        var updated = receipt
+        for index in updated.items.indices {
+            if let learned = preferences.learnedCategory(for: updated.items[index].name) {
+                updated.items[index].category = learned
+            }
+        }
+        return updated
     }
     func imageURL(filename: String?) -> URL? {
         guard let filename else { return nil }
@@ -132,6 +142,13 @@ final class AppStore: ObservableObject {
     private func seedAdminAccount() {
         guard !accounts.contains(where: { $0.username.lowercased() == "admin" }) else { return }
         accounts.append(LocalAccount(username: "admin", displayName: "Admin", passwordHash: Self.hash("admin")))
+    }
+    private func learnCategoryCorrections(from recognized: GroceryReceipt, to edited: GroceryReceipt) {
+        for editedItem in edited.items {
+            guard let originalItem = recognized.items.first(where: { $0.id == editedItem.id }),
+                  originalItem.category != editedItem.category else { continue }
+            preferences.learnCategory(itemName: editedItem.name, category: editedItem.category)
+        }
     }
     private func removeLegacySampleReceipt() {
         receipts.removeAll { receipt in

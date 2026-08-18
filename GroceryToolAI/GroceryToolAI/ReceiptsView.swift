@@ -11,13 +11,13 @@ import AppKit
 struct ReceiptsView: View {
     @EnvironmentObject private var store: AppStore
     @State private var photoItems: [PhotosPickerItem] = []
-    @State private var draft: GroceryReceipt?
+    @State private var activeDraft: ReceiptImportDraft?
+    @State private var pendingDrafts: [ReceiptImportDraft] = []
     @State private var isReading = false
     @State private var errorMessage: String?
     @State private var showingManual = false
     @State private var showingFiles = false
     @State private var selectedReceiptID: UUID?
-    @State private var draftImages: ReceiptImagePair?
 
     var body: some View {
         NavigationSplitView {
@@ -43,7 +43,12 @@ struct ReceiptsView: View {
             if let selectedReceipt { ReceiptDetailView(receipt: selectedReceipt) { store.delete(id: selectedReceipt.id); selectedReceiptID = nil } }
             else { ContentUnavailableView("No receipt selected", systemImage: "receipt", description: Text("Import, enter, or select a receipt from history.")) }
         }
-        .sheet(item: $draft, onDismiss: { draftImages = nil }) { receipt in ReceiptEditor(receipt: receipt) { store.add($0, images: draftImages); draft = nil; draftImages = nil } }
+        .sheet(item: $activeDraft, onDismiss: presentNextDraft) { draft in
+            ReceiptEditor(receipt: draft.receipt) {
+                store.add($0, images: draft.images, learningFrom: draft.receipt)
+                activeDraft = nil
+            }
+        }
         .sheet(isPresented: $showingManual) { ReceiptEditor(receipt: GroceryReceipt(merchant: "", date: .now, items: [])) { store.add($0); showingManual = false } }
         .fileImporter(isPresented: $showingFiles, allowedContentTypes: [.image, .pdf], allowsMultipleSelection: true) { result in
             Task { await importFiles(result) }
@@ -66,17 +71,17 @@ struct ReceiptsView: View {
         guard !items.isEmpty else { return }; isReading = true
         defer { isReading = false; photoItems = [] }
         do {
-            var combined = ""
-            var firstImageData: Data?
+            var imported: [ReceiptImportDraft] = []
             for item in items {
                 if let data = try await item.loadTransferable(type: Data.self) {
-                    if firstImageData == nil { firstImageData = data }
-                    combined += try await ReceiptOCRService.recognize(imageData: data) + "\n"
+                    let images = try ReceiptImageProcessor.prepare(imageData: data)
+                    let text = try await ReceiptOCRService.recognize(imageData: data)
+                    let receipt = store.applyLearnedCategories(to: ReceiptCleaner.clean(text: text))
+                    imported.append(ReceiptImportDraft(receipt: receipt, images: images))
                 }
             }
-            guard !combined.isEmpty else { throw CocoaError(.fileReadCorruptFile) }
-            if let firstImageData { draftImages = try ReceiptImageProcessor.prepare(imageData: firstImageData) }
-            draft = ReceiptCleaner.clean(text: combined)
+            guard !imported.isEmpty else { throw CocoaError(.fileReadCorruptFile) }
+            present(imported)
         } catch { errorMessage = error.localizedDescription }
     }
 
@@ -86,19 +91,44 @@ struct ReceiptsView: View {
         defer { isReading = false }
         do {
             let urls = try result.get()
-            var combined = ""
-            var firstImages: ReceiptImagePair?
+            var imported: [ReceiptImportDraft] = []
             for url in urls {
                 let accessed = url.startAccessingSecurityScopedResource()
                 defer { if accessed { url.stopAccessingSecurityScopedResource() } }
-                if firstImages == nil { firstImages = try ReceiptImageProcessor.prepare(fileURL: url) }
-                combined += try await ReceiptOCRService.recognize(fileURL: url) + "\n"
+                let images = try ReceiptImageProcessor.prepare(fileURL: url)
+                let text = try await ReceiptOCRService.recognize(fileURL: url)
+                let receipt = store.applyLearnedCategories(to: ReceiptCleaner.clean(text: text))
+                imported.append(ReceiptImportDraft(receipt: receipt, images: images))
             }
-            guard !combined.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw CocoaError(.fileReadCorruptFile) }
-            draftImages = firstImages
-            draft = ReceiptCleaner.clean(text: combined)
+            guard !imported.isEmpty else { throw CocoaError(.fileReadCorruptFile) }
+            present(imported)
         } catch { errorMessage = error.localizedDescription }
     }
+
+    private func present(_ drafts: [ReceiptImportDraft]) {
+        guard !drafts.isEmpty else { return }
+        if activeDraft == nil {
+            activeDraft = drafts[0]
+            pendingDrafts.append(contentsOf: drafts.dropFirst())
+        } else {
+            pendingDrafts.append(contentsOf: drafts)
+        }
+    }
+
+    private func presentNextDraft() {
+        guard !pendingDrafts.isEmpty else { return }
+        let next = pendingDrafts.removeFirst()
+        Task { @MainActor in
+            await Task.yield()
+            activeDraft = next
+        }
+    }
+}
+
+private struct ReceiptImportDraft: Identifiable {
+    let id = UUID()
+    let receipt: GroceryReceipt
+    let images: ReceiptImagePair
 }
 
 private struct ReceiptRow: View {

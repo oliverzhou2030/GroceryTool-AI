@@ -120,4 +120,14 @@ struct GroceryToolAITests {
         let plans = ShoppingPlanner.plans(for: ["Milk"], stores: [equalA, equalB], preferences: UserPreferences(), reviews: reviews)
         #expect(plans.first?.stops.first?.store.name == "White Shop")
     }
+
+    @Test func categoryCorrectionsPersistAndBecomeDefaults() throws {
+        var preferences = UserPreferences()
+        preferences.learnCategory(itemName: "Nestle KitKat Green Tea", category: .pantry)
+        #expect(preferences.learnedCategory(for: "NESTLE KITKAT GREEN-TEA") == .pantry)
+
+        let encoded = try JSONEncoder().encode(preferences)
+        let restored = try JSONDecoder().decode(UserPreferences.self, from: encoded)
+        #expect(restored.learnedCategory(for: "Nestle KitKat Green Tea") == .pantry)
+    }
 }

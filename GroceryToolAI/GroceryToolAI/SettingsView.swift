@@ -26,7 +26,8 @@ struct SettingsView: View {
                 Section("Learned preferences") {
                     LabeledContent("Plans selected", value: "\(store.preferences.selectedPlans)")
                     LabeledContent("Favorite store", value: store.preferences.storeWeights.max(by: { $0.value < $1.value })?.key ?? "Still learning")
-                    Label("Chosen shopping plans automatically improve future store rankings.", systemImage: "heart.text.square")
+                    LabeledContent("Category corrections", value: "\(store.preferences.categoryOverrides.count)")
+                    Label("Shopping choices and category corrections automatically improve future results.", systemImage: "heart.text.square")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 Section("Current location") {
