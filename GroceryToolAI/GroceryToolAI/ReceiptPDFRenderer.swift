@@ -32,7 +32,7 @@ enum ReceiptPDFRenderer {
 
         if let cleanedImageData, let source = CGImageSourceCreateWithData(cleanedImageData as CFData, nil), let image = CGImageSourceCreateImageAtIndex(source, 0, nil) {
             context.beginPDFPage(nil)
-            drawText("Enhanced receipt image", x: 42, y: 754, size: 20, weight: .bold, color: CGColor(red: 0.12, green: 0.45, blue: 0.72, alpha: 1), in: context)
+            drawText("Straightened receipt scan", x: 42, y: 754, size: 20, weight: .bold, color: CGColor(red: 0.12, green: 0.45, blue: 0.72, alpha: 1), in: context)
             let available = CGRect(x: 36, y: 36, width: 540, height: 690)
             let scale = min(available.width / CGFloat(image.width), available.height / CGFloat(image.height))
             let size = CGSize(width: CGFloat(image.width) * scale, height: CGFloat(image.height) * scale)

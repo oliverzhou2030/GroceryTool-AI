@@ -191,7 +191,7 @@ struct ReceiptDetailView: View {
 
     private var documentDescription: String {
         switch documentMode {
-        case .pdf: "Formatted receipt PDF with store, date, categorized items, totals, and enhanced image"
+        case .pdf: "Formatted receipt PDF with store, date, categorized items, totals, and a straightened scan"
         case .original: "Original imported receipt"
         }
     }

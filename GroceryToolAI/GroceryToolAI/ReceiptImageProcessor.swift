@@ -30,10 +30,11 @@ enum ReceiptImageProcessor {
     private static func prepare(image: CIImage) throws -> ReceiptImagePair {
         let normalized = resized(image, maximumDimension: 2600)
         let straightened = straighten(normalized)
-        let document = straightened.applyingFilter("CIDocumentEnhancer", parameters: [kCIInputAmountKey: 1.0])
-        let cleaned = document
-            .applyingFilter("CIColorControls", parameters: [kCIInputSaturationKey: 0.0, kCIInputContrastKey: 1.32, kCIInputBrightnessKey: 0.08])
-            .applyingFilter("CIExposureAdjust", parameters: [kCIInputEVKey: 0.28])
+        let cropped = cropToPrintedContent(straightened)
+        let lifted = cropped.applyingFilter("CIHighlightShadowAdjust", parameters: ["inputShadowAmount": 0.9, "inputHighlightAmount": 0.8])
+        let cleaned = lifted
+            .applyingFilter("CIDocumentEnhancer", parameters: [kCIInputAmountKey: 0.12])
+            .applyingFilter("CIColorControls", parameters: [kCIInputSaturationKey: 0.0, kCIInputContrastKey: 1.05, kCIInputBrightnessKey: 0.05])
         guard let originalData = jpegData(from: normalized, quality: 0.88), let cleanedData = jpegData(from: cleaned, quality: 0.92) else { throw CocoaError(.fileWriteUnknown) }
         return ReceiptImagePair(original: originalData, cleaned: cleanedData)
     }
@@ -42,23 +43,23 @@ enum ReceiptImageProcessor {
         let extent = image.extent.integral
         guard let cgImage = context.createCGImage(image, from: extent) else { return image }
         let handler = VNImageRequestHandler(cgImage: cgImage, orientation: .up)
-        let documentRequest = VNDetectDocumentSegmentationRequest()
-        try? handler.perform([documentRequest])
-        var detectedRectangle = documentRequest.results?.first
-        if detectedRectangle == nil {
-            let rectangleRequest = VNDetectRectanglesRequest()
-            rectangleRequest.maximumObservations = 1
-            rectangleRequest.minimumAspectRatio = 0.1
-            rectangleRequest.maximumAspectRatio = 1.0
-            rectangleRequest.minimumSize = 0.12
-            rectangleRequest.quadratureTolerance = 45
-            try? handler.perform([rectangleRequest])
-            detectedRectangle = rectangleRequest.results?.first
-        }
+        let rectangleRequest = VNDetectRectanglesRequest()
+        rectangleRequest.maximumObservations = 8
+        rectangleRequest.minimumAspectRatio = 0.14
+        rectangleRequest.maximumAspectRatio = 0.72
+        rectangleRequest.minimumSize = 0.18
+        rectangleRequest.minimumConfidence = 0.65
+        rectangleRequest.quadratureTolerance = 30
+        try? handler.perform([rectangleRequest])
+        let detectedRectangle = rectangleRequest.results?
+            .filter { $0.boundingBox.width * $0.boundingBox.height > 0.16 }
+            .max { first, second in
+                first.boundingBox.width * first.boundingBox.height < second.boundingBox.width * second.boundingBox.height
+            }
         guard let rectangle = detectedRectangle else { return image }
         func vector(_ point: CGPoint) -> CIVector {
-            let paddedX = min(1, max(0, point.x + (point.x < 0.5 ? -0.07 : 0.07)))
-            let paddedY = min(1, max(0, point.y + (point.y < 0.5 ? -0.025 : 0.025)))
+            let paddedX = min(1, max(0, point.x + (point.x < 0.5 ? -0.015 : 0.015)))
+            let paddedY = min(1, max(0, point.y + (point.y < 0.5 ? -0.01 : 0.01)))
             return CIVector(x: extent.minX + paddedX * extent.width, y: extent.minY + paddedY * extent.height)
         }
         let corrected = image.applyingFilter("CIPerspectiveCorrection", parameters: [
@@ -70,6 +71,40 @@ enum ReceiptImageProcessor {
         let correctedArea = corrected.extent.width * corrected.extent.height
         let originalArea = extent.width * extent.height
         return correctedArea > originalArea * 0.12 ? translatedToOrigin(corrected) : image
+    }
+
+    private static func cropToPrintedContent(_ image: CIImage) -> CIImage {
+        let extent = image.extent.integral
+        guard let cgImage = context.createCGImage(image, from: extent) else { return image }
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .fast
+        request.minimumTextHeight = 0.006
+        try? VNImageRequestHandler(cgImage: cgImage, orientation: .up).perform([request])
+        let observations = (request.results ?? []).filter {
+            guard let candidate = $0.topCandidates(1).first else { return false }
+            return candidate.confidence > 0.25 && candidate.string.count > 1
+        }
+        guard observations.count >= 4 else { return image }
+
+        let printedBounds = observations.map { observation in
+            let box = observation.boundingBox
+            return CGRect(
+                x: extent.minX + box.minX * extent.width,
+                y: extent.minY + box.minY * extent.height,
+                width: box.width * extent.width,
+                height: box.height * extent.height
+            )
+        }.reduce(CGRect.null) { $0.union($1) }
+
+        let horizontalPadding = max(28, printedBounds.width * 0.07)
+        let crop = CGRect(
+            x: printedBounds.minX - horizontalPadding,
+            y: extent.minY,
+            width: printedBounds.width + horizontalPadding * 2,
+            height: extent.height
+        ).intersection(extent).integral
+        guard !crop.isNull, crop.width * crop.height > extent.width * extent.height * 0.08 else { return image }
+        return translatedToOrigin(image.cropped(to: crop))
     }
 
     private static func resized(_ image: CIImage, maximumDimension: CGFloat) -> CIImage {

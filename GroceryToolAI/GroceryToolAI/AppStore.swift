@@ -5,6 +5,7 @@ import CryptoKit
 
 @MainActor
 final class AppStore: ObservableObject {
+    private static let documentProcessingVersion = 2
     @Published var receipts: [GroceryReceipt] = [] { didSet { save() } }
     @Published var preferences = UserPreferences() { didSet { save() } }
     @Published var stores: [GroceryStore] = SampleData.stores
@@ -25,7 +26,7 @@ final class AppStore: ObservableObject {
         isLoading = false
         removeLegacySampleReceipt()
         seedAdminAccount()
-        backfillPDFs()
+        upgradeReceiptDocuments()
     }
 
     func add(_ receipt: GroceryReceipt, images: ReceiptImagePair? = nil) {
@@ -48,6 +49,7 @@ final class AppStore: ObservableObject {
             try? pdf.write(to: imagesDirectory.appendingPathComponent(pdfName), options: .atomic)
             savedReceipt.pdfFilename = pdfName
         }
+        savedReceipt.documentProcessingVersion = Self.documentProcessingVersion
         receipts.insert(savedReceipt, at: 0)
     }
     func imageURL(filename: String?) -> URL? {
@@ -143,17 +145,26 @@ final class AppStore: ObservableObject {
             try? FileManager.default.removeItem(at: imagesDirectory.appendingPathComponent(filename))
         }
     }
-    private func backfillPDFs() {
+    private func upgradeReceiptDocuments() {
         var updated = receipts
         var changed = false
-        for index in updated.indices where updated[index].pdfFilename == nil {
-            let filename = "\(updated[index].id.uuidString)-clean-receipt.pdf"
-            let cleanedData = imageURL(filename: updated[index].cleanedImageFilename).flatMap { try? Data(contentsOf: $0) }
+        for index in updated.indices where (updated[index].documentProcessingVersion ?? 0) < Self.documentProcessingVersion {
+            let filename = updated[index].pdfFilename ?? "\(updated[index].id.uuidString)-clean-receipt.pdf"
+            var cleanedData = imageURL(filename: updated[index].cleanedImageFilename).flatMap { try? Data(contentsOf: $0) }
+            if let originalURL = imageURL(filename: updated[index].originalImageFilename),
+               let originalData = try? Data(contentsOf: originalURL),
+               let images = try? ReceiptImageProcessor.prepare(imageData: originalData) {
+                let cleanedName = updated[index].cleanedImageFilename ?? "\(updated[index].id.uuidString)-cleaned.jpg"
+                try? images.cleaned.write(to: imagesDirectory.appendingPathComponent(cleanedName), options: .atomic)
+                updated[index].cleanedImageFilename = cleanedName
+                cleanedData = images.cleaned
+            }
             if let pdf = ReceiptPDFRenderer.render(receipt: updated[index], cleanedImageData: cleanedData) {
                 try? pdf.write(to: imagesDirectory.appendingPathComponent(filename), options: .atomic)
                 updated[index].pdfFilename = filename
-                changed = true
             }
+            updated[index].documentProcessingVersion = Self.documentProcessingVersion
+            changed = true
         }
         if changed { receipts = updated }
     }
