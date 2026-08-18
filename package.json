@@ -11,14 +11,16 @@
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
+    "@napi-rs/canvas": "latest",
     "cors": "latest",
     "dotenv": "latest",
     "express": "latest",
     "lucide-react": "latest",
     "multer": "latest",
-    "openai": "latest",
+    "pdfjs-dist": "latest",
     "react": "latest",
     "react-dom": "latest",
+    "tesseract.js": "latest",
     "vite": "latest",
     "zod": "latest"
   },

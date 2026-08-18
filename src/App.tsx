@@ -24,7 +24,7 @@ export default function App(){
         </section>
         {files.length>0&&<section className="queue"><div><strong>{files.length} receipt{files.length>1?'s':''} ready</strong><span>{files.map(f=>f.name).join(' · ')}</span></div><button className="dark scan" onClick={e=>{e.stopPropagation();scan()}} disabled={busy}>{busy?<LoaderCircle className="spin" size={18}/>:<Sparkles size={18}/>} {busy?'Reading receipts…':'Build my bill'}</button></section>}
         {error&&<div className="error">{error}</div>}
-        <div className="trust"><span><ShieldCheck/>Your key stays on your server</span><span><ReceiptText/>Item-by-item extraction</span><span><FileText/>Printable, editable results</span></div>
+        <div className="trust"><span><ShieldCheck/>DeepSeek key stays on your server</span><span><ReceiptText/>OCR + AI extraction</span><span><FileText/>Printable, editable results</span></div>
       </>:<section className="workspace">
         <div className="workspace-head"><div><div className="eyebrow">YOUR GROCERY BILL</div><h1>{receipts.length} receipt{receipts.length>1?'s':''}, one clear total.</h1></div><button className="ghost" onClick={()=>{setReceipts([]);setFiles([])}}><RotateCcw size={16}/> Start over</button></div>
         <div className="summary"><div><span>LINE ITEMS</span><b>{totals.items}</b></div><div><span>SUBTOTAL</span><b>{money(totals.subtotal,current?.currency)}</b></div><div><span>TAX</span><b>{money(totals.tax,current?.currency)}</b></div><div className="grand"><span>GRAND TOTAL</span><b>{money(totals.total,current?.currency)}</b></div></div>

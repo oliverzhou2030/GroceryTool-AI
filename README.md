@@ -1,6 +1,6 @@
 # Market Ledger
 
-Market Ledger turns grocery receipt images or PDFs into an editable, consolidated bill. It extracts merchants, dates, line items, categories, quantities, prices, discounts, tax, and totals with OpenAI vision.
+Market Ledger turns grocery receipt images or PDFs into an editable, consolidated bill. Server-side OCR reads each receipt, then DeepSeek structures merchants, dates, line items, categories, quantities, prices, discounts, tax, and totals.
 
 ## Features
 
@@ -13,12 +13,12 @@ Market Ledger turns grocery receipt images or PDFs into an editable, consolidate
 
 ## Run locally
 
-Requires Node.js 20+ and an OpenAI API key.
+Requires Node.js 20+ and a DeepSeek API key.
 
 ```bash
 npm install
 cp .env.example .env
-# Add your OPENAI_API_KEY to .env
+# Add your DEEPSEEK_API_KEY to .env
 npm run dev
 ```
 
@@ -31,7 +31,7 @@ npm run build
 npm start
 ```
 
-The server serves the built app from `dist/`. Set `PORT`, `OPENAI_API_KEY`, and optionally `OPENAI_MODEL` in your hosting environment.
+The server serves the built app from `dist/`. Set `PORT`, `DEEPSEEK_API_KEY`, and optionally `DEEPSEEK_MODEL` in your hosting environment.
 
 ## Privacy
 
