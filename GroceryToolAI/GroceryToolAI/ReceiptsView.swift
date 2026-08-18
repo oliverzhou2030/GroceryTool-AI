@@ -117,18 +117,16 @@ struct ReceiptDetailView: View {
     private var displayedDocumentURL: URL? {
         switch documentMode {
         case .pdf: store.documentURL(filename: receipt.pdfFilename)
-        case .cleaned: store.imageURL(filename: receipt.cleanedImageFilename)
         case .original: store.imageURL(filename: receipt.originalImageFilename)
         }
     }
 
     var body: some View {
         List {
-            if receipt.pdfFilename != nil || receipt.cleanedImageFilename != nil || receipt.originalImageFilename != nil {
+            if receipt.pdfFilename != nil || receipt.originalImageFilename != nil {
                 Section("Receipt document") {
                     Picker("Document", selection: $documentMode) {
                         if receipt.pdfFilename != nil { Text("PDF").tag(ReceiptDocumentMode.pdf) }
-                        if receipt.cleanedImageFilename != nil { Text("Cleaned").tag(ReceiptDocumentMode.cleaned) }
                         if receipt.originalImageFilename != nil { Text("Original").tag(ReceiptDocumentMode.original) }
                     }
                     .pickerStyle(.segmented)
@@ -140,7 +138,7 @@ struct ReceiptDetailView: View {
                         .frame(maxWidth: .infinity, minHeight: 360, maxHeight: 560)
                         .contentShape(Rectangle())
                         .onTapGesture { showingFullImage = true }
-                        Label(documentDescription, systemImage: documentMode == .pdf ? "doc.richtext" : (documentMode == .cleaned ? "wand.and.stars" : "photo"))
+                        Label(documentDescription, systemImage: documentMode == .pdf ? "doc.richtext" : "photo")
                             .font(.caption).foregroundStyle(.secondary)
                         if let pdfURL = store.documentURL(filename: receipt.pdfFilename) {
                             ShareLink(item: pdfURL) { Label("Share clean receipt PDF", systemImage: "square.and.arrow.up") }
@@ -149,7 +147,7 @@ struct ReceiptDetailView: View {
                 }
             } else {
                 Section("Receipt image") {
-                    Label("No image was saved for this older or manually entered receipt. Re-import the photo to add Original and Cleaned views.", systemImage: "photo.badge.exclamationmark")
+                    Label("No original image was saved for this older or manually entered receipt. Re-import the photo to add an Original view.", systemImage: "photo.badge.exclamationmark")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
             }
@@ -173,6 +171,7 @@ struct ReceiptDetailView: View {
             }
         }
         .navigationTitle(receipt.merchant)
+        .onAppear { if receipt.pdfFilename == nil { documentMode = .original } }
         .toolbar { ToolbarItem { Button(role: .destructive) { confirmingDelete = true } label: { Label("Delete receipt", systemImage: "trash") } } }
         .confirmationDialog("Delete this receipt?", isPresented: $confirmingDelete, titleVisibility: .visible) { Button("Delete receipt", role: .destructive, action: onDelete) }
         .sheet(isPresented: $showingFullImage) {
@@ -193,7 +192,6 @@ struct ReceiptDetailView: View {
     private var documentDescription: String {
         switch documentMode {
         case .pdf: "Formatted receipt PDF with store, date, categorized items, totals, and enhanced image"
-        case .cleaned: "Straightened, whitened, and enhanced for easier reading"
         case .original: "Original imported receipt"
         }
     }
@@ -201,7 +199,6 @@ struct ReceiptDetailView: View {
 
 private enum ReceiptDocumentMode: String, CaseIterable, Identifiable {
     case pdf = "PDF"
-    case cleaned = "Cleaned"
     case original = "Original"
     var id: String { rawValue }
 }
