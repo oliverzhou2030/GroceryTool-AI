@@ -16,8 +16,34 @@ xcodebuild -quiet -project "$PROJECT" -scheme GroceryToolAI -destination "platfo
 DEVICE_ID="$(xcrun simctl list devices available | sed -n "s/^[[:space:]]*$DEVICE_NAME (\([0-9A-F-]*\)).*/\1/p" | head -1)"
 if [[ -n "$DEVICE_ID" ]]; then
   SIMULATOR_DATA_CONTAINER="$(xcrun simctl get_app_container "$DEVICE_ID" com.oliverzhou2030.GroceryToolAI data 2>/dev/null || true)"
+  if [[ -z "$SIMULATOR_DATA_CONTAINER" ]]; then
+    print "Installing the iPhone app and recovering its receipt history..."
+    "$PROJECT_ROOT/run-iphone.command" "$DEVICE_NAME"
+    SIMULATOR_DATA_CONTAINER="$(xcrun simctl get_app_container "$DEVICE_ID" com.oliverzhou2030.GroceryToolAI data 2>/dev/null || true)"
+  fi
   if [[ -n "$SIMULATOR_DATA_CONTAINER" ]]; then
-    export GROCERYTOOL_SHARED_DATA_DIRECTORY="$SIMULATOR_DATA_CONTAINER/Library/Application Support/GroceryToolAI"
+    SHARED_DATA_DIRECTORY="$SIMULATOR_DATA_CONTAINER/Library/Application Support/GroceryToolAI"
+    SHARED_DATA_SIZE="$(stat -f %z "$SHARED_DATA_DIRECTORY/user-data.json" 2>/dev/null || print 0)"
+    DEVICE_DATA_ROOT="$HOME/Library/Developer/CoreSimulator/Devices/$DEVICE_ID/data"
+    RECOVERY_DATA_DIRECTORY=""
+    RECOVERY_DATA_SIZE=0
+    for candidate_json in "$DEVICE_DATA_ROOT"/Containers/Data/Application/*/Library/Application\ Support/GroceryToolAI/user-data.json(N); do
+      candidate_size="$(stat -f %z "$candidate_json" 2>/dev/null || print 0)"
+      if (( candidate_size > RECOVERY_DATA_SIZE )); then
+        RECOVERY_DATA_SIZE="$candidate_size"
+        RECOVERY_DATA_DIRECTORY="${candidate_json:h}"
+      fi
+    done
+    if [[ -n "$RECOVERY_DATA_DIRECTORY" && "$RECOVERY_DATA_DIRECTORY" != "$SHARED_DATA_DIRECTORY" && "$RECOVERY_DATA_SIZE" -gt "$SHARED_DATA_SIZE" ]]; then
+      mkdir -p "$SHARED_DATA_DIRECTORY"
+      cp "$RECOVERY_DATA_DIRECTORY/user-data.json" "$SHARED_DATA_DIRECTORY/user-data.json"
+      if [[ -d "$RECOVERY_DATA_DIRECTORY/ReceiptImages" ]]; then
+        mkdir -p "$SHARED_DATA_DIRECTORY/ReceiptImages"
+        ditto "$RECOVERY_DATA_DIRECTORY/ReceiptImages" "$SHARED_DATA_DIRECTORY/ReceiptImages"
+      fi
+      print "Recovered existing receipt history and files into the active Simulator app."
+    fi
+    export GROCERYTOOL_SHARED_DATA_DIRECTORY="$SHARED_DATA_DIRECTORY"
     print "Receipt sync: Mac + $DEVICE_NAME Simulator"
   else
     print "Receipt sync: run ./run-iphone.command once to install the iPhone app"
@@ -38,10 +64,19 @@ else
   print "Google Sheets: not configured (add the OAuth JSON to $GOOGLE_OAUTH_FILE)"
 fi
 
-CANONICAL_EXECUTABLE="${EXECUTABLE:A}"
 while IFS= read -r running_pid; do
   [[ -n "$running_pid" ]] && kill "$running_pid" 2>/dev/null || true
-done < <(pgrep -f "^${CANONICAL_EXECUTABLE}$" || true)
+done < <(pgrep -f '/GroceryToolAI\.app/Contents/MacOS/GroceryToolAI$' || true)
 sleep 0.5
-nohup "$EXECUTABLE" > /tmp/GroceryToolAI-mac.log 2>&1 &!
+LAUNCH_ENV=()
+if [[ -n "${GROCERYTOOL_SHARED_DATA_DIRECTORY:-}" ]]; then
+  LAUNCH_ENV+=(--env "GROCERYTOOL_SHARED_DATA_DIRECTORY=$GROCERYTOOL_SHARED_DATA_DIRECTORY")
+fi
+if [[ -n "${OPENPRICEENGINE_API_KEY:-}" ]]; then
+  LAUNCH_ENV+=(--env "OPENPRICEENGINE_API_KEY=$OPENPRICEENGINE_API_KEY")
+fi
+if [[ -n "${GOOGLE_OAUTH_CREDENTIALS_FILE:-}" ]]; then
+  LAUNCH_ENV+=(--env "GOOGLE_OAUTH_CREDENTIALS_FILE=$GOOGLE_OAUTH_CREDENTIALS_FILE")
+fi
+open -n -F "${LAUNCH_ENV[@]}" "$APP"
 print "GroceryTool AI is open on Mac."

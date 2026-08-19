@@ -52,7 +52,7 @@ cd ~/Documents/GroceryTool-AI
 ./run-mac.command
 ```
 
-The Mac launcher connects to the installed `iPhone 17 Pro` Simulator data container. Receipt history, original images, PDFs, accounts, reviews, and learned preferences then refresh automatically in both running apps. Run `./run-iphone.command` at least once before `./run-mac.command` so the Simulator app and its data container exist.
+The Mac launcher connects to the `iPhone 17 Pro` Simulator data container. Receipt history, original images, PDFs, accounts, reviews, and learned preferences then refresh automatically in both running apps. If Xcode has removed the Simulator app registration, `./run-mac.command` automatically reinstalls it and recovers the largest existing GroceryTool AI receipt store and its document files before opening either app.
 
 This local development sync covers the iPhone Simulator and Mac on this computer. Syncing with a physical iPhone requires an Apple Developer account plus iCloud/CloudKit entitlements; local simulator storage cannot be mounted by a physical device.
 
