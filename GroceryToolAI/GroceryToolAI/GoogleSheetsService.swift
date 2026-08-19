@@ -46,6 +46,25 @@ final class GoogleSheetsService {
             accessToken: accessToken,
             json: ["majorDimension": "ROWS", "values": rows]
         )
+        let formattingURL = URL(string: "https://sheets.googleapis.com/v4/spreadsheets/\(created.spreadsheetId):batchUpdate")!
+        _ = try await googleRequest(
+            url: formattingURL,
+            method: "POST",
+            accessToken: accessToken,
+            json: ["requests": [
+                ["repeatCell": [
+                    "range": ["sheetId": 0],
+                    "cell": ["userEnteredFormat": ["wrapStrategy": "WRAP"]],
+                    "fields": "userEnteredFormat.wrapStrategy"
+                ]],
+                ["autoResizeDimensions": [
+                    "dimensions": ["sheetId": 0, "dimension": "COLUMNS", "startIndex": 0, "endIndex": 8]
+                ]],
+                ["autoResizeDimensions": [
+                    "dimensions": ["sheetId": 0, "dimension": "ROWS", "startIndex": 0, "endIndex": max(rows.count, 1)]
+                ]]
+            ]]
+        )
         guard let url = URL(string: created.spreadsheetUrl) else { throw GoogleSheetsError.invalidResponse }
         return url
     }

@@ -8,6 +8,9 @@ struct ShoppingSearchView: View {
     @State private var catalogStore: GroceryStore?
     @State private var isLoading = false
     @State private var errorMessage: String?
+    private var budgetStatus: GroceryBudgetStatus? {
+        GroceryBudgetService.status(for: store.preferences.groceryBudget, receipts: store.receipts)
+    }
 
     var body: some View {
         NavigationStack {
@@ -21,6 +24,26 @@ struct ShoppingSearchView: View {
                         .disabled(query.trimmingCharacters(in: .whitespaces).isEmpty || isLoading)
                 }
                 .padding(.horizontal)
+
+                if let budgetStatus {
+                    HStack(spacing: 10) {
+                        Image(systemName: budgetStatus.remaining >= 0 ? "wallet.bifold.fill" : "exclamationmark.circle.fill")
+                            .foregroundStyle(budgetStatus.remaining >= 0 ? Color.appBlue : .red)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Grocery budget").font(.subheadline.bold())
+                            Text(budgetStatus.remaining >= 0
+                                 ? "\(budgetStatus.remaining.formatted(.currency(code: "USD"))) remaining this period"
+                                 : "\(abs(budgetStatus.remaining).formatted(.currency(code: "USD"))) over budget this period")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Text("\(Int(min(max(budgetStatus.progress, 0), 9.99) * 100))%")
+                            .font(.system(.subheadline, design: .rounded, weight: .bold)).monospacedDigit()
+                    }
+                    .padding(12)
+                    .background(Color.appBlue.opacity(0.10), in: RoundedRectangle(cornerRadius: 14))
+                    .padding(.horizontal)
+                }
 
                 if isLoading {
                     ProgressView("Loading real nearby shops and product prices…")
@@ -83,7 +106,12 @@ struct ShoppingSearchView: View {
             .padding(.top)
             .navigationTitle("Smart store search")
             .toolbar {
-                ToolbarItem(placement: .primaryAction) {
+                ToolbarItemGroup(placement: .primaryAction) {
+                    NavigationLink {
+                        GroceryAIView()
+                    } label: {
+                        Label("Ask grocery AI", systemImage: "sparkles")
+                    }
                     Button { Task { await refreshStores() } } label: { Image(systemName: "arrow.clockwise") }
                         .disabled(isLoading)
                 }
@@ -99,7 +127,8 @@ struct ShoppingSearchView: View {
             for: query.split(separator: ",").map(String.init),
             stores: store.stores,
             preferences: store.preferences,
-            reviews: store.reviews
+            reviews: store.reviews,
+            budget: budgetStatus
         )
     }
 
@@ -153,7 +182,8 @@ struct ShoppingSearchView: View {
                     for: requestedItems,
                     stores: nearby,
                     preferences: store.preferences,
-                    reviews: store.reviews
+                    reviews: store.reviews,
+                    budget: budgetStatus
                 )
             }
         }

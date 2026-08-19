@@ -8,6 +8,7 @@ APP="$DERIVED_DATA/Build/Products/Debug/GroceryToolAI.app"
 EXECUTABLE="$APP/Contents/MacOS/GroceryToolAI"
 OPENPRICEENGINE_KEY_FILE="$PROJECT_ROOT/.openpricengine-key"
 GOOGLE_OAUTH_FILE="$PROJECT_ROOT/.google-oauth-client.json"
+DEEPSEEK_KEY_FILE="$PROJECT_ROOT/.deepseek-key"
 DEVICE_NAME="${1:-iPhone 17 Pro}"
 export DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer"
 
@@ -64,6 +65,13 @@ else
   print "Google Sheets: not configured (add the OAuth JSON to $GOOGLE_OAUTH_FILE)"
 fi
 
+if [[ -r "$DEEPSEEK_KEY_FILE" ]]; then
+  export DEEPSEEK_API_KEY="$(<"$DEEPSEEK_KEY_FILE")"
+  print "Grocery AI: configured"
+else
+  print "Grocery AI: not configured (add the key to $DEEPSEEK_KEY_FILE)"
+fi
+
 while IFS= read -r running_pid; do
   [[ -n "$running_pid" ]] && kill "$running_pid" 2>/dev/null || true
 done < <(pgrep -f '/GroceryToolAI\.app/Contents/MacOS/GroceryToolAI$' || true)
@@ -77,6 +85,9 @@ if [[ -n "${OPENPRICEENGINE_API_KEY:-}" ]]; then
 fi
 if [[ -n "${GOOGLE_OAUTH_CREDENTIALS_FILE:-}" ]]; then
   LAUNCH_ENV+=(--env "GOOGLE_OAUTH_CREDENTIALS_FILE=$GOOGLE_OAUTH_CREDENTIALS_FILE")
+fi
+if [[ -n "${DEEPSEEK_API_KEY:-}" ]]; then
+  LAUNCH_ENV+=(--env "DEEPSEEK_API_KEY=$DEEPSEEK_API_KEY")
 fi
 open -n -F "${LAUNCH_ENV[@]}" "$APP"
 print "GroceryTool AI is open on Mac."

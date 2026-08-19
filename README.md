@@ -20,6 +20,9 @@ A native iPhone and Mac grocery assistant that turns receipt photos into clean b
 - Receipt calendar with per-day history and custom date-range spending totals
 - Multi-date calendar selection with tap-again deselection and selected-day totals
 - UTF-8 CSV export for Microsoft Excel and Google Sheets
+- Receipt-only spreadsheet exports with wrapped, automatically resized rows and columns
+- Recurring grocery budgets with live spent/remaining totals and budget-aware store rankings
+- Grocery-only AI chat for shopping, substitutions, storage, meal planning, receipts, and budgeting
 - One-store and two-store shopping plans with price, travel time, pros, and cons
 - Real nearby grocery-store names and addresses from Open Prices location data
 - Searchable store catalogs with crowdsourced prices from the last 180 days and last-observed dates
@@ -67,6 +70,8 @@ On first sign-in, allow current-location access to enter the iPhone app. For dev
 Receipt history starts empty. Choose receipt images from Photos, import an image/PDF from Files, or enter a receipt manually. Select any saved receipt to inspect its clean bill, and swipe it or use the trash button to delete it.
 
 In Calendar, tap as many dates as needed; tapping a selected date again removes it from the selection. In Insights, choose **Export CSV for Sheets** on iPhone. On Mac, **Open Google Sheets** signs in with Google, creates `username YYYY-MM-DD to YYYY-MM-DD`, uploads the selected receipt rows, and opens the completed spreadsheet in the browser. OAuth credentials are loaded locally from `.google-oauth-client.json`; that file is Git-ignored and must never be committed.
+
+Set a recurring grocery budget in Settings by entering an amount, period length, and days/weeks/months. The Shop screen shows the current period's remaining amount and uses it when ranking plans. Open **Ask grocery AI** from the Shop toolbar. To enable it, put a complete DeepSeek API key on one line in `.deepseek-key` at the repository root and restart with either launcher; the ignored key file is never committed. Only chat messages are sent to DeepSeek—receipt images and receipt history are not attached.
 
 The Shop tab reads the public Open Prices / Open Food Facts API without an API key. Its prices are crowdsourced observations from the last 180 days and therefore include a “last seen” date; they must not be treated as guaranteed live shelf inventory. Repeated chain locations are reduced to the closest store.
 

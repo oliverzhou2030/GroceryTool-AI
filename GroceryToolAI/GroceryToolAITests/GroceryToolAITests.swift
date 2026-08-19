@@ -93,11 +93,34 @@ struct GroceryToolAITests {
         #expect(analytics.categorySpendTotals.first(where: { $0.0 == .snack })?.1 == 5)
     }
 
-    @Test func spreadsheetContainsExcelCompatibleSummary() {
+    @Test func spreadsheetContainsOnlyReceiptRows() {
         let csv = SpreadsheetExporter.csv(receipts: SampleData.receipts)
         #expect(csv.contains("Receipt Total"))
-        #expect(csv.contains("Food : snack ratio"))
-        #expect(csv.contains("STORE RATIO"))
+        #expect(!csv.contains("SUMMARY"))
+        #expect(!csv.contains("Food : snack ratio"))
+        #expect(!csv.contains("STORE RATIO"))
+        #expect(SpreadsheetExporter.rows(receipts: SampleData.receipts).count == SampleData.receipts[0].items.count + 1)
+    }
+
+    @Test func groceryBudgetTracksCurrentPeriodSpending() throws {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = try #require(calendar.date(from: DateComponents(year: 2026, month: 8, day: 19, hour: 12)))
+        let current = GroceryReceipt(merchant: "Current", date: now, items: [ReceiptItem(name: "Milk", category: .dairy, unitPrice: 25, total: 25)])
+        let old = GroceryReceipt(merchant: "Old", date: try #require(calendar.date(byAdding: .month, value: -1, to: now)), items: [ReceiptItem(name: "Rice", category: .pantry, unitPrice: 100, total: 100)])
+        let budget = GroceryBudget(isEnabled: true, amount: 300, periodLength: 1, periodUnit: .month)
+        let status = try #require(GroceryBudgetService.status(for: budget, receipts: [current, old], now: now, calendar: calendar))
+        #expect(status.spent == 25)
+        #expect(status.remaining == 275)
+    }
+
+    @Test func plannerPenalizesPlansThatExceedRemainingBudget() {
+        let cheap = GroceryStore(name: "Budget Store", travelMinutes: 15, distanceMiles: 3, offers: [ProductOffer(product: "Milk", price: 4, category: .dairy)])
+        let costly = GroceryStore(name: "Premium Store", travelMinutes: 1, distanceMiles: 0.2, offers: [ProductOffer(product: "Milk", price: 20, category: .dairy)])
+        let budget = GroceryBudgetStatus(amount: 100, spent: 90, start: .now, end: .now.addingTimeInterval(86_400))
+        let plans = ShoppingPlanner.plans(for: ["Milk"], stores: [costly, cheap], preferences: UserPreferences(), budget: budget)
+        #expect(plans.first?.stops.first?.store.name == "Budget Store")
+        #expect(plans.first?.pros.contains(where: { $0.contains("Fits your budget") }) == true)
+        #expect(plans.last?.cons.contains(where: { $0.contains("Exceeds remaining budget") }) == true)
     }
 
     @Test func plannerPrefersOneStopAndLearnsStores() {

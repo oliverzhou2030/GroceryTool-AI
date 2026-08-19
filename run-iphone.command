@@ -8,6 +8,7 @@ DEVICE_NAME="${1:-iPhone 17 Pro}"
 SIMULATOR_LATITUDE="${GROCERYTOOL_LATITUDE:-40.789}"
 SIMULATOR_LONGITUDE="${GROCERYTOOL_LONGITUDE:--73.702}"
 OPENPRICEENGINE_KEY_FILE="$PROJECT_ROOT/.openpricengine-key"
+DEEPSEEK_KEY_FILE="$PROJECT_ROOT/.deepseek-key"
 export DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer"
 
 DEVICE_ID="$(xcrun simctl list devices available | sed -n "s/^[[:space:]]*$DEVICE_NAME (\([0-9A-F-]*\)).*/\1/p" | head -1)"
@@ -46,13 +47,20 @@ if [[ -n "$LEGACY_DATA_DIRECTORY" && "$LEGACY_DATA_DIRECTORY" != "$ACTIVE_DATA_D
   print "Recovered existing receipt history and files into the active Simulator app."
 fi
 open -a Simulator
+SIMULATOR_ENV=()
 if [[ -r "$OPENPRICEENGINE_KEY_FILE" ]]; then
   OPENPRICEENGINE_API_KEY="$(<"$OPENPRICEENGINE_KEY_FILE")"
-  SIMCTL_CHILD_OPENPRICEENGINE_API_KEY="$OPENPRICEENGINE_API_KEY" \
-    xcrun simctl launch --terminate-running-process "$DEVICE_ID" com.oliverzhou2030.GroceryToolAI
+  SIMULATOR_ENV+=("SIMCTL_CHILD_OPENPRICEENGINE_API_KEY=$OPENPRICEENGINE_API_KEY")
   print "OpenPriceEngine: configured"
 else
-  xcrun simctl launch --terminate-running-process "$DEVICE_ID" com.oliverzhou2030.GroceryToolAI
   print "OpenPriceEngine: not configured (add the key to $OPENPRICEENGINE_KEY_FILE)"
 fi
+if [[ -r "$DEEPSEEK_KEY_FILE" ]]; then
+  DEEPSEEK_API_KEY="$(<"$DEEPSEEK_KEY_FILE")"
+  SIMULATOR_ENV+=("SIMCTL_CHILD_DEEPSEEK_API_KEY=$DEEPSEEK_API_KEY")
+  print "Grocery AI: configured"
+else
+  print "Grocery AI: not configured (add the key to $DEEPSEEK_KEY_FILE)"
+fi
+env "${SIMULATOR_ENV[@]}" xcrun simctl launch --terminate-running-process "$DEVICE_ID" com.oliverzhou2030.GroceryToolAI
 print "Simulator location: $SIMULATOR_LATITUDE, $SIMULATOR_LONGITUDE"

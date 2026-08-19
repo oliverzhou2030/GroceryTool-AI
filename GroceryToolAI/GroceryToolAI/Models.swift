@@ -20,6 +20,31 @@ enum AppLanguage: String, Codable, CaseIterable, Identifiable {
     var locale: Locale { Locale(identifier: rawValue) }
 }
 
+enum BudgetPeriodUnit: String, Codable, CaseIterable, Identifiable {
+    case day = "Days"
+    case week = "Weeks"
+    case month = "Months"
+
+    var id: String { rawValue }
+}
+
+struct GroceryBudget: Codable, Equatable {
+    var isEnabled = false
+    var amount = 3_000.0
+    var periodLength = 1
+    var periodUnit = BudgetPeriodUnit.month
+}
+
+struct GroceryBudgetStatus: Equatable {
+    var amount: Double
+    var spent: Double
+    var start: Date
+    var end: Date
+
+    var remaining: Double { amount - spent }
+    var progress: Double { amount > 0 ? spent / amount : 0 }
+}
+
 struct LocalAccount: Identifiable, Codable, Equatable {
     var id = UUID()
     var username: String
@@ -115,15 +140,17 @@ struct UserPreferences: Codable, Equatable {
     var selectedPlans: Int = 0
     var theme: AppTheme = .system
     var language: AppLanguage = .english
-    init(storeWeights: [String: Double] = [:], categorySpend: [GroceryCategory: Double] = [:], categoryOverrides: [String: GroceryCategory] = [:], selectedPlans: Int = 0, theme: AppTheme = .system, language: AppLanguage = .english) {
+    var groceryBudget = GroceryBudget()
+    init(storeWeights: [String: Double] = [:], categorySpend: [GroceryCategory: Double] = [:], categoryOverrides: [String: GroceryCategory] = [:], selectedPlans: Int = 0, theme: AppTheme = .system, language: AppLanguage = .english, groceryBudget: GroceryBudget = GroceryBudget()) {
         self.storeWeights = storeWeights
         self.categorySpend = categorySpend
         self.categoryOverrides = categoryOverrides
         self.selectedPlans = selectedPlans
         self.theme = theme
         self.language = language
+        self.groceryBudget = groceryBudget
     }
-    private enum CodingKeys: String, CodingKey { case storeWeights, categorySpend, categoryOverrides, selectedPlans, theme, language }
+    private enum CodingKeys: String, CodingKey { case storeWeights, categorySpend, categoryOverrides, selectedPlans, theme, language, groceryBudget }
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         storeWeights = try container.decodeIfPresent([String: Double].self, forKey: .storeWeights) ?? [:]
@@ -132,6 +159,7 @@ struct UserPreferences: Codable, Equatable {
         selectedPlans = try container.decodeIfPresent(Int.self, forKey: .selectedPlans) ?? 0
         theme = try container.decodeIfPresent(AppTheme.self, forKey: .theme) ?? .system
         language = try container.decodeIfPresent(AppLanguage.self, forKey: .language) ?? .english
+        groceryBudget = try container.decodeIfPresent(GroceryBudget.self, forKey: .groceryBudget) ?? GroceryBudget()
     }
     mutating func record(plan: ShoppingPlan) {
         selectedPlans += 1

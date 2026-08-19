@@ -214,6 +214,28 @@ enum AnalyticsService {
     }
 }
 
+enum GroceryBudgetService {
+    static func status(for budget: GroceryBudget, receipts: [GroceryReceipt], now: Date = .now, calendar: Calendar = .current) -> GroceryBudgetStatus? {
+        guard budget.isEnabled, budget.amount > 0, budget.periodLength > 0 else { return nil }
+        let component: Calendar.Component
+        let start: Date
+        switch budget.periodUnit {
+        case .day:
+            component = .day
+            start = calendar.startOfDay(for: now)
+        case .week:
+            component = .weekOfYear
+            start = calendar.dateInterval(of: .weekOfYear, for: now)?.start ?? calendar.startOfDay(for: now)
+        case .month:
+            component = .month
+            start = calendar.dateInterval(of: .month, for: now)?.start ?? calendar.startOfDay(for: now)
+        }
+        guard let end = calendar.date(byAdding: component, value: budget.periodLength, to: start) else { return nil }
+        let spent = receipts.filter { $0.date >= start && $0.date < end }.reduce(0) { $0 + $1.total }
+        return GroceryBudgetStatus(amount: budget.amount, spent: spent, start: start, end: end)
+    }
+}
+
 enum SpreadsheetExporter {
     static func rows(receipts: [GroceryReceipt]) -> [[String]] {
         var rows = [["Date", "Store", "Item", "Category", "Quantity", "Unit Price", "Line Total", "Receipt Total"]]
@@ -223,9 +245,6 @@ enum SpreadsheetExporter {
                 rows.append([formatter.string(from: receipt.date), receipt.merchant, item.name, item.category.rawValue, String(item.quantity), String(format: "%.2f", item.unitPrice), String(format: "%.2f", item.total), String(format: "%.2f", receipt.total)])
             }
         }
-        let analytics = SpendingAnalytics(receipts: receipts)
-        rows += [["", "SUMMARY", "Total spend", "", "", "", "", String(format: "%.2f", analytics.total)], ["", "SUMMARY", "Food : snack ratio", "", "", "", "", String(format: "%.2f", analytics.foodSnackRatio)]]
-        for (store, amount) in analytics.storeTotals { rows.append(["", "STORE RATIO", store, "", "", "", "", String(format: "%.2f%%", analytics.total == 0 ? 0 : amount / analytics.total * 100)]) }
         return rows
     }
     static func csv(receipts: [GroceryReceipt]) -> String {
@@ -236,7 +255,7 @@ enum SpreadsheetExporter {
 }
 
 enum ShoppingPlanner {
-    static func plans(for queries: [String], stores: [GroceryStore], preferences: UserPreferences, reviews: [StoreReview] = []) -> [ShoppingPlan] {
+    static func plans(for queries: [String], stores: [GroceryStore], preferences: UserPreferences, reviews: [StoreReview] = [], budget: GroceryBudgetStatus? = nil) -> [ShoppingPlan] {
         let wanted = queries.map { $0.lowercased().trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         let ratingBonus: (String) -> Double = { name in
             let ratings = reviews.filter { $0.storeName == name }.map(\.rating)
@@ -270,6 +289,20 @@ enum ShoppingPlanner {
                     else { missing.append(query) }
                 }
                 if !offers.isEmpty { results.append(ShoppingPlan(title: "Nearby alternatives at \(store.name)", stops: [PlanStop(store: store, products: offers)], missing: missing, substitutions: subs, score: Double(store.travelMinutes) + 15 + Double(missing.count * 20) - ratingBonus(store.name), pros: ["Nearest practical option", "Offers similar products"], cons: missing.isEmpty ? ["Uses substitutions"] : ["Some items unavailable"])) }
+            }
+        }
+        if let budget {
+            results = results.map { plan in
+                var adjusted = plan
+                let afterPurchase = budget.remaining - plan.estimatedCost
+                if afterPurchase >= 0 {
+                    adjusted.score -= min(12, max(2, plan.estimatedCost / max(1, budget.remaining) * 8))
+                    adjusted.pros.append("Fits your budget · " + afterPurchase.formatted(.currency(code: "USD")) + " left")
+                } else {
+                    adjusted.score += 100 + abs(afterPurchase) * 4
+                    adjusted.cons.append("Exceeds remaining budget by " + abs(afterPurchase).formatted(.currency(code: "USD")))
+                }
+                return adjusted
             }
         }
         return results.sorted { $0.score < $1.score }
