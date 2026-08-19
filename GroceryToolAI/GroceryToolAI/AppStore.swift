@@ -8,7 +8,7 @@ final class AppStore: ObservableObject {
     private static let documentProcessingVersion = 2
     @Published var receipts: [GroceryReceipt] = [] { didSet { save() } }
     @Published var preferences = UserPreferences() { didSet { save() } }
-    @Published var stores: [GroceryStore] = SampleData.stores
+    @Published var stores: [GroceryStore] = []
     @Published var accounts: [LocalAccount] = [] { didSet { save() } }
     @Published var reviews: [StoreReview] = [] { didSet { save() } }
     @Published var currentUsername: String?

@@ -75,6 +75,8 @@ struct ProductOffer: Identifiable, Codable, Hashable {
     var price: Double
     var category: GroceryCategory
     var alternatives: [String] = []
+    var observedDate: Date?
+    var source: String?
 }
 
 struct GroceryStore: Identifiable, Codable, Hashable {
@@ -83,6 +85,8 @@ struct GroceryStore: Identifiable, Codable, Hashable {
     var travelMinutes: Int
     var distanceMiles: Double
     var offers: [ProductOffer]
+    var address: String? = nil
+    var source: String? = nil
 }
 
 struct PlanStop: Identifiable, Hashable {

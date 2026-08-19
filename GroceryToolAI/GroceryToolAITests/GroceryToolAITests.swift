@@ -115,6 +115,32 @@ struct GroceryToolAITests {
         #expect(plans.first?.substitutions["coca-cola"] == "Pepsi Cola")
     }
 
+    @Test func plannerDoesNotCallOneContributingStoreASplitTrip() {
+        let complete = GroceryStore(name: "Complete", travelMinutes: 10, distanceMiles: 2, offers: [
+            ProductOffer(product: "Coca-Cola", price: 3, category: .beverage),
+            ProductOffer(product: "Milk", price: 4, category: .dairy)
+        ])
+        let unrelated = GroceryStore(name: "Unrelated", travelMinutes: 5, distanceMiles: 1, offers: [
+            ProductOffer(product: "Bread", price: 2, category: .bakery)
+        ])
+        let plans = ShoppingPlanner.plans(for: ["Coca-Cola", "Milk"], stores: [complete, unrelated], preferences: UserPreferences())
+        #expect(plans.count == 1)
+        #expect(plans.first?.stops.count == 1)
+        #expect(plans.first?.title == "One stop at Complete")
+    }
+
+    @Test func nearbyStoresKeepOnlyClosestRepeatedChain() {
+        let farther = GroceryStore(name: "ShopRite", travelMinutes: 20, distanceMiles: 8, offers: [
+            ProductOffer(product: "Milk", price: 4, category: .dairy)
+        ])
+        let closest = GroceryStore(name: "Shop Rite", travelMinutes: 5, distanceMiles: 1, offers: [
+            ProductOffer(product: "Milk", price: 3, category: .dairy)
+        ])
+        let unique = OpenPricesService.deduplicatedClosestStores([farther, closest])
+        #expect(unique.count == 1)
+        #expect(unique.first?.distanceMiles == 1)
+    }
+
     @Test func highlyReviewedStoreReceivesRankingBoost() {
         let equalA = GroceryStore(name: "Blue Shop", travelMinutes: 5, distanceMiles: 1, offers: [ProductOffer(product: "Milk", price: 4, category: .dairy)])
         let equalB = GroceryStore(name: "White Shop", travelMinutes: 5, distanceMiles: 1, offers: [ProductOffer(product: "Milk", price: 4, category: .dairy)])

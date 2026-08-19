@@ -20,6 +20,8 @@ A native iPhone and Mac grocery assistant that turns receipt photos into clean b
 - Receipt calendar with per-day history and custom date-range spending totals
 - UTF-8 CSV export for Microsoft Excel and Google Sheets
 - One-store and two-store shopping plans with price, travel time, pros, and cons
+- Real nearby grocery-store names and addresses from Open Prices location data
+- Searchable store catalogs with crowdsourced prices from the last 180 days and last-observed dates
 - Similar-product recommendations when a requested brand is unavailable nearby
 - iPhone location permission flow for nearby-store comparisons
 - Local account creation and sign-in, with a seeded `admin` / `admin` demo account
@@ -45,10 +47,11 @@ On first sign-in, allow current-location access to enter the iPhone app. For dev
 
 Receipt history starts empty. Choose receipt images from Photos, import an image/PDF from Files, or enter a receipt manually. Select any saved receipt to inspect its clean bill, and swipe it or use the trash button to delete it.
 
-The sample store catalog is local and editable in `AppStore.swift`. Real-time retailer inventory requires retailer-specific APIs; see **External APIs**.
+The Shop tab reads the public Open Prices / Open Food Facts API without an API key. Its prices are crowdsourced observations from the last 180 days and therefore include a “last seen” date; they must not be treated as guaranteed live shelf inventory. Repeated chain locations are reduced to the closest store.
 
 ## External APIs needed for live inventory
 
+- Open Prices / Open Food Facts supplies free crowdsourced product, location, and observed-price data. Read requests require no account, but coverage varies by store.
 - A retailer product/inventory API (for example Kroger Developer APIs, Walmart Marketplace APIs when eligible, or another licensed catalog provider).
 - Apple MapKit can provide nearby-store search and routing after enabling the location capability; it does not provide product inventory.
 - An optional LLM API can improve noisy OCR parsing, but the included cleaner works offline and sends no receipt data to third parties.

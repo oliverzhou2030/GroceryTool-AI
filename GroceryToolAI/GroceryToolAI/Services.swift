@@ -54,9 +54,9 @@ enum ReceiptCleaner {
         let text = name.lowercased()
         if ["kitkat", "kit kat", "chocolate", "chip", "cookie", "candy", "snack", "cracker", "biscuit", "wafer", "gummy", "popcorn"].contains(where: text.contains) { return .snack }
         if ["milk", "cheese", "yogurt", "cream", "reddi wip", "whipped", "butter", "egg"].contains(where: text.contains) { return .dairy }
+        if ["cola", "soda", "water", "juice", "coffee", "tea", "drink", "beverage", "cider"].contains(where: text.contains) { return .beverage }
         if ["mushroom", "enoki", "apple", "banana", "lettuce", "onion", "fruit", "vegetable", "tomato", "potato", "carrot", "broccoli", "spinach", "avocado"].contains(where: text.contains) { return .produce }
         if ["ramen", " rame", "samyang", "noodle", "rice", "pasta", "sauce", "bamboo shoot", "cereal", "flour", "sugar", "oil"].contains(where: text.contains) { return .pantry }
-        if ["cola", "soda", "water", "juice", "coffee", "tea", "drink", "beverage"].contains(where: text.contains) { return .beverage }
         if ["bread", "bagel", "muffin", "croissant", "cake", "bakery"].contains(where: text.contains) { return .bakery }
         if ["beef", "chicken", "pork", "fish", "salmon", "shrimp", "turkey", "lamb"].contains(where: text.contains) { return .meat }
         if ["frozen", "ice cream", "pizza"].contains(where: text.contains) { return .frozen }
@@ -252,7 +252,7 @@ enum ShoppingPlanner {
             var stops: [PlanStop] = []; var missing: [String] = []
             for store in pair { let found = wanted.compactMap { q in store.offers.first { $0.product.lowercased().contains(q) } }; if !found.isEmpty { stops.append(PlanStop(store: store, products: found)) } }
             for q in wanted where !stops.flatMap(\.products).contains(where: { $0.product.lowercased().contains(q) }) { missing.append(q) }
-            if missing.isEmpty {
+            if missing.isEmpty && stops.count == 2 {
                 let preferenceBonus = pair.reduce(0.0) { $0 + preferences.storeWeights[$1.name, default: 0] * 3 + ratingBonus($1.name) }
                 results.append(ShoppingPlan(title: "Split between \(pair[0].name) + \(pair[1].name)", stops: stops, missing: [], substitutions: [:], score: Double(stops.reduce(0) { $0 + $1.store.travelMinutes }) + stops.flatMap(\.products).reduce(0) { $0 + $1.price } - preferenceBonus, pros: ["All requested products available", "May reduce product cost"], cons: ["Requires two stops"]))
             }

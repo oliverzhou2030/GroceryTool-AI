@@ -87,7 +87,7 @@ struct AuthView: View {
         } else {
             errorMessage = nil
         }
-        if store.currentUsername != nil && location.authorizationStatus == .notDetermined { location.requestAccess() }
+        if store.currentUsername != nil { location.refreshLocation() }
     }
 }
 
