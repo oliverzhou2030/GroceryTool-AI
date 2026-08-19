@@ -13,7 +13,7 @@ final class LocationService: NSObject, ObservableObject, CLLocationManagerDelega
         authorizationStatus = manager.authorizationStatus
         super.init()
         manager.delegate = self
-        manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
+        manager.desiredAccuracy = kCLLocationAccuracyBest
     }
 
     var isAuthorized: Bool {
@@ -46,31 +46,38 @@ final class LocationService: NSObject, ObservableObject, CLLocationManagerDelega
 
     func requestAccess() {
         errorMessage = nil
+        location = nil
         #if os(macOS)
-        manager.requestAlwaysAuthorization()
+        if authorizationStatus == .notDetermined { manager.requestAlwaysAuthorization() }
         #else
-        manager.requestWhenInUseAuthorization()
+        if authorizationStatus == .notDetermined { manager.requestWhenInUseAuthorization() }
         #endif
-        manager.startUpdatingLocation()
+        if isAuthorized { manager.startUpdatingLocation() }
     }
 
     func refreshLocation() {
         guard isAuthorized else { requestAccess(); return }
-        manager.requestLocation()
+        errorMessage = nil
+        location = nil
+        manager.startUpdatingLocation()
     }
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         authorizationStatus = manager.authorizationStatus
-        if isAuthorized { manager.requestLocation() }
+        if isAuthorized { manager.startUpdatingLocation() }
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let newest = locations.last else { return }
-        Task { @MainActor in self.location = newest }
+        Task { @MainActor in
+            self.location = newest
+            self.errorMessage = nil
+        }
         manager.stopUpdatingLocation()
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        if let locationError = error as? CLError, locationError.code == .locationUnknown { return }
         Task { @MainActor in self.errorMessage = error.localizedDescription }
     }
 }

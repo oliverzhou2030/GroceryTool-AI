@@ -43,6 +43,12 @@ cd ~/Documents/GroceryTool-AI
 ./run-iphone.command
 ```
 
+The launcher sets the Simulator location to `40.789, -73.702` each time it runs. To use another simulated coordinate:
+
+```sh
+GROCERYTOOL_LATITUDE=40.789 GROCERYTOOL_LONGITUDE=-73.702 ./run-iphone.command
+```
+
 On first sign-in, allow current-location access to enter the iPhone app. For development, use username `admin` and password `admin`. This is a local demo account; replace it with backend authentication before releasing the app.
 
 Receipt history starts empty. Choose receipt images from Photos, import an image/PDF from Files, or enter a receipt manually. Select any saved receipt to inspect its clean bill, and swipe it or use the trash button to delete it.
