@@ -8,3 +8,4 @@ build/
 tmp/
 output/pdf/
 .openpricengine-key
+.google-oauth-client.json

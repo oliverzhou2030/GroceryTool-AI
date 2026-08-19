@@ -10,7 +10,8 @@ struct InsightsView: View {
     @State private var end = Date.now
     @State private var chartStyle = InsightChartStyle.bar
 #if os(macOS)
-    @State private var showSheetsImportNotice = false
+    @State private var isCreatingSheet = false
+    @State private var sheetsError: String?
 #endif
 
     private var analytics: SpendingAnalytics {
@@ -67,11 +68,16 @@ struct InsightsView: View {
                     let title = store.spreadsheetTitle(from: start, through: end)
 #if os(macOS)
                     Button {
-                        openGoogleSheets(title: title)
+                        Task { await openGoogleSheets(title: title) }
                     } label: {
-                        Label("Open Google Sheets", systemImage: "tablecells")
+                        if isCreatingSheet {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Label("Open Google Sheets", systemImage: "tablecells")
+                        }
                     }
                     .buttonStyle(.borderedProminent)
+                    .disabled(isCreatingSheet)
 #else
                     if let url = store.exportURL(for: analytics.receipts, title: title) {
                         ShareLink(
@@ -86,7 +92,7 @@ struct InsightsView: View {
                 }
                 Group {
 #if os(macOS)
-                    Text("The named CSV is prepared and Google Sheets opens in your browser. Automatic creation in your Google account requires Google OAuth permission.")
+                    Text("Creates a named spreadsheet in your Google account, uploads this date range, and opens it in your browser.")
 #else
                     Text("Choose Google Drive or Google Sheets in the share menu.")
 #endif
@@ -98,22 +104,30 @@ struct InsightsView: View {
         }
         .frame(maxWidth: .infinity)
 #if os(macOS)
-        .alert("CSV ready for Google Sheets", isPresented: $showSheetsImportNotice) {
+        .alert("Google Sheets", isPresented: Binding(
+            get: { sheetsError != nil },
+            set: { if !$0 { sheetsError = nil } }
+        )) {
             Button("OK", role: .cancel) { }
         } message: {
-            Text("The file uses the name \(store.spreadsheetTitle(from: start, through: end)). Google authorization is still needed before GroceryTool AI can create and fill the online sheet automatically.")
+            Text(sheetsError ?? "Unknown error")
         }
 #endif
     }
 
 #if os(macOS)
-    private func openGoogleSheets(title: String) {
-        guard let csvURL = store.exportURL(for: analytics.receipts, title: title) else { return }
-        NSWorkspace.shared.activateFileViewerSelecting([csvURL])
-        if let sheetsURL = URL(string: "https://sheets.new") {
-            NSWorkspace.shared.open(sheetsURL)
+    @MainActor private func openGoogleSheets(title: String) async {
+        isCreatingSheet = true
+        defer { isCreatingSheet = false }
+        do {
+            let url = try await GoogleSheetsService.shared.createSpreadsheet(
+                title: title,
+                rows: SpreadsheetExporter.rows(receipts: analytics.receipts)
+            )
+            NSWorkspace.shared.open(url)
+        } catch {
+            sheetsError = error.localizedDescription
         }
-        showSheetsImportNotice = true
     }
 #endif
 

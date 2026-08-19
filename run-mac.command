@@ -7,6 +7,7 @@ DERIVED_DATA="/tmp/GroceryToolAI-MacDerivedData"
 APP="$DERIVED_DATA/Build/Products/Debug/GroceryToolAI.app"
 EXECUTABLE="$APP/Contents/MacOS/GroceryToolAI"
 OPENPRICEENGINE_KEY_FILE="$PROJECT_ROOT/.openpricengine-key"
+GOOGLE_OAUTH_FILE="$PROJECT_ROOT/.google-oauth-client.json"
 DEVICE_NAME="${1:-iPhone 17 Pro}"
 export DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer"
 
@@ -28,6 +29,13 @@ if [[ -r "$OPENPRICEENGINE_KEY_FILE" ]]; then
   print "OpenPriceEngine: configured"
 else
   print "OpenPriceEngine: not configured (add the key to $OPENPRICEENGINE_KEY_FILE)"
+fi
+
+if [[ -r "$GOOGLE_OAUTH_FILE" ]]; then
+  export GOOGLE_OAUTH_CREDENTIALS_FILE="$GOOGLE_OAUTH_FILE"
+  print "Google Sheets: configured"
+else
+  print "Google Sheets: not configured (add the OAuth JSON to $GOOGLE_OAUTH_FILE)"
 fi
 
 CANONICAL_EXECUTABLE="${EXECUTABLE:A}"

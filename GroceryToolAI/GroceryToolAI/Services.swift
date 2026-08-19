@@ -215,7 +215,7 @@ enum AnalyticsService {
 }
 
 enum SpreadsheetExporter {
-    static func csv(receipts: [GroceryReceipt]) -> String {
+    static func rows(receipts: [GroceryReceipt]) -> [[String]] {
         var rows = [["Date", "Store", "Item", "Category", "Quantity", "Unit Price", "Line Total", "Receipt Total"]]
         let formatter = ISO8601DateFormatter()
         for receipt in receipts.sorted(by: { $0.date < $1.date }) {
@@ -226,6 +226,10 @@ enum SpreadsheetExporter {
         let analytics = SpendingAnalytics(receipts: receipts)
         rows += [["", "SUMMARY", "Total spend", "", "", "", "", String(format: "%.2f", analytics.total)], ["", "SUMMARY", "Food : snack ratio", "", "", "", "", String(format: "%.2f", analytics.foodSnackRatio)]]
         for (store, amount) in analytics.storeTotals { rows.append(["", "STORE RATIO", store, "", "", "", "", String(format: "%.2f%%", analytics.total == 0 ? 0 : amount / analytics.total * 100)]) }
+        return rows
+    }
+    static func csv(receipts: [GroceryReceipt]) -> String {
+        let rows = rows(receipts: receipts)
         return rows.map { $0.map(escape).joined(separator: ",") }.joined(separator: "\n")
     }
     nonisolated private static func escape(_ value: String) -> String { "\"\(value.replacingOccurrences(of: "\"", with: "\"\""))\"" }
