@@ -12,21 +12,32 @@ final class AppStore: ObservableObject {
     @Published var accounts: [LocalAccount] = [] { didSet { save() } }
     @Published var reviews: [StoreReview] = [] { didSet { save() } }
     @Published var currentUsername: String?
+    let syncStatusText: String
     private var isLoading = true
     private let fileURL: URL
     private let imagesDirectory: URL
+    private var lastLoadedData: Data?
+    private var syncTimer: AnyCancellable?
 
     init() {
-        let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!.appendingPathComponent("GroceryToolAI", isDirectory: true)
+        let defaultDirectory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!.appendingPathComponent("GroceryToolAI", isDirectory: true)
+        let sharedPath = ProcessInfo.processInfo.environment["GROCERYTOOL_SHARED_DATA_DIRECTORY"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let directory = sharedPath?.isEmpty == false ? URL(fileURLWithPath: sharedPath!, isDirectory: true) : defaultDirectory
+        syncStatusText = sharedPath?.isEmpty == false ? "Mac + iPhone Simulator" : "This device"
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         imagesDirectory = directory.appendingPathComponent("ReceiptImages", isDirectory: true)
         try? FileManager.default.createDirectory(at: imagesDirectory, withIntermediateDirectories: true)
         fileURL = directory.appendingPathComponent("user-data.json")
+        if directory.standardizedFileURL != defaultDirectory.standardizedFileURL {
+            migrateLegacyData(from: defaultDirectory, platformName: "macOS")
+        }
         load()
         isLoading = false
         removeLegacySampleReceipt()
         seedAdminAccount()
         upgradeReceiptDocuments()
+        startFileSync()
     }
 
     func add(_ receipt: GroceryReceipt, images: ReceiptImagePair? = nil, learningFrom recognizedReceipt: GroceryReceipt? = nil) {
@@ -130,6 +141,10 @@ final class AppStore: ObservableObject {
     }
     private func load() {
         guard let data = try? Data(contentsOf: fileURL), let snapshot = try? JSONDecoder().decode(Snapshot.self, from: data) else { return }
+        lastLoadedData = data
+        apply(snapshot)
+    }
+    private func apply(_ snapshot: Snapshot) {
         receipts = snapshot.receipts
         preferences = snapshot.preferences
         accounts = snapshot.accounts
@@ -137,7 +152,66 @@ final class AppStore: ObservableObject {
     }
     private func save() {
         guard !isLoading, let data = try? JSONEncoder().encode(Snapshot(receipts: receipts, preferences: preferences, accounts: accounts, reviews: reviews)) else { return }
-        try? data.write(to: fileURL, options: .atomic)
+        do {
+            try data.write(to: fileURL, options: .atomic)
+            lastLoadedData = data
+        } catch { }
+    }
+    private func startFileSync() {
+        syncTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect().sink { [weak self] _ in
+            self?.reloadIfChanged()
+        }
+    }
+    private func reloadIfChanged() {
+        guard let data = try? Data(contentsOf: fileURL), data != lastLoadedData,
+              let snapshot = try? JSONDecoder().decode(Snapshot.self, from: data) else { return }
+        isLoading = true
+        lastLoadedData = data
+        apply(snapshot)
+        isLoading = false
+    }
+    private func migrateLegacyData(from legacyDirectory: URL, platformName: String) {
+        let marker = fileURL.deletingLastPathComponent().appendingPathComponent(".migrated-\(platformName)")
+        guard !FileManager.default.fileExists(atPath: marker.path) else { return }
+        let legacyFile = legacyDirectory.appendingPathComponent("user-data.json")
+        let shared = Self.snapshot(at: fileURL)
+        let legacy = Self.snapshot(at: legacyFile)
+        if let legacy {
+            let merged = Self.merged(shared ?? legacy, with: legacy)
+            if let data = try? JSONEncoder().encode(merged) { try? data.write(to: fileURL, options: .atomic) }
+            let legacyImages = legacyDirectory.appendingPathComponent("ReceiptImages", isDirectory: true)
+            if let files = try? FileManager.default.contentsOfDirectory(at: legacyImages, includingPropertiesForKeys: nil) {
+                for source in files {
+                    let destination = imagesDirectory.appendingPathComponent(source.lastPathComponent)
+                    if !FileManager.default.fileExists(atPath: destination.path) { try? FileManager.default.copyItem(at: source, to: destination) }
+                }
+            }
+        }
+        try? Data().write(to: marker, options: .atomic)
+    }
+    private static func snapshot(at url: URL) -> Snapshot? {
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return try? JSONDecoder().decode(Snapshot.self, from: data)
+    }
+    private static func merged(_ primary: Snapshot, with secondary: Snapshot) -> Snapshot {
+        var receipts = primary.receipts
+        let receiptIDs = Set(receipts.map(\.id))
+        receipts.append(contentsOf: secondary.receipts.filter { !receiptIDs.contains($0.id) })
+        receipts.sort { $0.date > $1.date }
+
+        var preferences = primary.preferences
+        for (store, weight) in secondary.preferences.storeWeights { preferences.storeWeights[store] = max(preferences.storeWeights[store, default: 0], weight) }
+        for (category, amount) in secondary.preferences.categorySpend { preferences.categorySpend[category] = max(preferences.categorySpend[category, default: 0], amount) }
+        for (item, category) in secondary.preferences.categoryOverrides where preferences.categoryOverrides[item] == nil { preferences.categoryOverrides[item] = category }
+        preferences.selectedPlans = max(preferences.selectedPlans, secondary.preferences.selectedPlans)
+
+        var accounts = primary.accounts
+        let usernames = Set(accounts.map { $0.username.lowercased() })
+        accounts.append(contentsOf: secondary.accounts.filter { !usernames.contains($0.username.lowercased()) })
+        var reviews = primary.reviews
+        let reviewIDs = Set(reviews.map(\.id))
+        reviews.append(contentsOf: secondary.reviews.filter { !reviewIDs.contains($0.id) })
+        return Snapshot(receipts: receipts, preferences: preferences, accounts: accounts, reviews: reviews)
     }
     private func seedAdminAccount() {
         guard !accounts.contains(where: { $0.username.lowercased() == "admin" }) else { return }

@@ -39,6 +39,12 @@ struct SettingsView: View {
                     Label("Shopping choices and category corrections automatically improve future results.", systemImage: "heart.text.square")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
+                Section("Data sync") {
+                    LabeledContent("Storage", value: store.syncStatusText)
+                    Label("Changes refresh automatically while the Mac app and iPhone Simulator are open.", systemImage: "arrow.triangle.2.circlepath.icloud")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
                 Section("Current location") {
                     LabeledContent("Permission", value: location.statusText)
                     if let coordinate = location.location?.coordinate {
@@ -49,7 +55,7 @@ struct SettingsView: View {
                     Button(location.isAuthorized ? "Refresh current location" : "Allow location access") { location.refreshLocation() }
                 }
                 Section("Privacy") {
-                    Label("Accounts, reviews, receipts, and preferences stay on this device.", systemImage: "lock.shield.fill")
+                    Label("Accounts, reviews, receipts, and preferences stay in local storage on this computer.", systemImage: "lock.shield.fill")
                     Label("Only approximate location is requested while the app is in use.", systemImage: "location.circle.fill")
                 }
             }
