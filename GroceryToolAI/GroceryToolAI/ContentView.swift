@@ -41,7 +41,7 @@ struct ContentView: View {
             ReceiptCalendarView().tabItem { Label("Calendar", systemImage: "calendar") }
             InsightsView().tabItem { Label("Insights", systemImage: "chart.pie.fill") }
             ShoppingSearchView().tabItem { Label("Shop", systemImage: "magnifyingglass") }
-            SettingsView().tabItem { Label("Settings", systemImage: "gearshape.fill") }
+            GroceryToolsView().tabItem { Label("Tools", systemImage: "square.grid.2x2.fill") }
         }
         .background(Color.appBackground)
     }

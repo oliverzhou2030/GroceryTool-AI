@@ -106,12 +106,7 @@ struct ShoppingSearchView: View {
             .padding(.top)
             .navigationTitle("Smart store search")
             .toolbar {
-                ToolbarItemGroup(placement: .primaryAction) {
-                    NavigationLink {
-                        GroceryAIView()
-                    } label: {
-                        Label("Ask grocery AI", systemImage: "sparkles")
-                    }
+                ToolbarItem(placement: .primaryAction) {
                     Button { Task { await refreshStores() } } label: { Image(systemName: "arrow.clockwise") }
                         .disabled(isLoading)
                 }
