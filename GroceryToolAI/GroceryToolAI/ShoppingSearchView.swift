@@ -299,7 +299,9 @@ private struct StoreCatalogSheet: View {
             }
             .searchable(text: $filter, prompt: "Search recorded products")
             .navigationTitle(store.name)
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .safeAreaInset(edge: .bottom) {
                 Text(sourceNotice)
                     .font(.caption2).foregroundStyle(.secondary).padding(10)

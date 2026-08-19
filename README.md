@@ -18,6 +18,7 @@ A native iPhone and Mac grocery assistant that turns receipt photos into clean b
 - Colorful bar and pie chart modes for food types and market spending
 - Food-category spending ratios with both bar and pie chart views
 - Receipt calendar with per-day history and custom date-range spending totals
+- Multi-date calendar selection with tap-again deselection and selected-day totals
 - UTF-8 CSV export for Microsoft Excel and Google Sheets
 - One-store and two-store shopping plans with price, travel time, pros, and cons
 - Real nearby grocery-store names and addresses from Open Prices location data
@@ -44,6 +45,13 @@ cd ~/Documents/GroceryTool-AI
 ./run-iphone.command
 ```
 
+Run the native Mac app directly from Terminal:
+
+```sh
+cd ~/Documents/GroceryTool-AI
+./run-mac.command
+```
+
 The launcher sets the Simulator location to `40.789, -73.702` each time it runs. To use another simulated coordinate:
 
 ```sh
@@ -53,6 +61,8 @@ GROCERYTOOL_LATITUDE=40.789 GROCERYTOOL_LONGITUDE=-73.702 ./run-iphone.command
 On first sign-in, allow current-location access to enter the iPhone app. For development, use username `admin` and password `admin`. This is a local demo account; replace it with backend authentication before releasing the app.
 
 Receipt history starts empty. Choose receipt images from Photos, import an image/PDF from Files, or enter a receipt manually. Select any saved receipt to inspect its clean bill, and swipe it or use the trash button to delete it.
+
+In Calendar, tap as many dates as needed; tapping a selected date again removes it from the selection. In Insights, choose **Export CSV for Sheets** and share it to Google Drive/Google Sheets on iPhone, or import the saved CSV at Google Sheets on Mac.
 
 The Shop tab reads the public Open Prices / Open Food Facts API without an API key. Its prices are crowdsourced observations from the last 180 days and therefore include a “last seen” date; they must not be treated as guaranteed live shelf inventory. Repeated chain locations are reduced to the closest store.
 

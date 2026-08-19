@@ -2,6 +2,7 @@
 xcuserdata/
 DerivedData/
 *.xcuserstate
+*.profraw
 build/
 .build/
 tmp/

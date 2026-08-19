@@ -37,7 +37,7 @@ struct InsightsView: View {
                     categoryChart
                     categorySpendChart
                     storeChart
-                    Text("CSV files open directly in Microsoft Excel and import into Google Sheets.")
+                    Text("Use Export CSV for Google Sheets, Microsoft Excel, Numbers, or Files.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -59,10 +59,19 @@ struct InsightsView: View {
                         .foregroundStyle(.secondary)
                     Spacer()
                     if let url = store.exportURL(for: analytics.receipts) {
-                        ShareLink(item: url) { Label("Export CSV", systemImage: "square.and.arrow.up") }
+                        ShareLink(
+                            item: url,
+                            preview: SharePreview("GroceryTool AI receipt ledger")
+                        ) {
+                            Label("Export CSV for Sheets", systemImage: "tablecells")
+                        }
                             .buttonStyle(.borderedProminent)
                     }
                 }
+                Text("On iPhone, choose Google Drive or Google Sheets in the share menu. On Mac, save the CSV and import it at sheets.google.com.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .frame(maxWidth: .infinity)
