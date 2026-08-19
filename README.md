@@ -22,6 +22,7 @@ A native iPhone and Mac grocery assistant that turns receipt photos into clean b
 - One-store and two-store shopping plans with price, travel time, pros, and cons
 - Real nearby grocery-store names and addresses from Open Prices location data
 - Searchable store catalogs with crowdsourced prices from the last 180 days and last-observed dates
+- Current Trader Joe's catalog prices through OpenPriceEngine when a local API key is configured
 - Similar-product recommendations when a requested brand is unavailable nearby
 - iPhone location permission flow for nearby-store comparisons
 - Local account creation and sign-in, with a seeded `admin` / `admin` demo account
@@ -54,6 +55,8 @@ On first sign-in, allow current-location access to enter the iPhone app. For dev
 Receipt history starts empty. Choose receipt images from Photos, import an image/PDF from Files, or enter a receipt manually. Select any saved receipt to inspect its clean bill, and swipe it or use the trash button to delete it.
 
 The Shop tab reads the public Open Prices / Open Food Facts API without an API key. Its prices are crowdsourced observations from the last 180 days and therefore include a “last seen” date; they must not be treated as guaranteed live shelf inventory. Repeated chain locations are reduced to the closest store.
+
+To enable OpenPriceEngine, put the key on a single line in `.openpricengine-key` at the repository root. The launcher passes it only to the Simulator app process; the file is ignored by Git. The free OpenPriceEngine plan currently exposes one U.S. grocery catalog (Trader Joe's), so nearby-shop location and routing still come from Apple MapKit and Open Prices.
 
 ## External APIs needed for live inventory
 

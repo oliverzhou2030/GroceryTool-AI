@@ -23,7 +23,7 @@ struct ShoppingSearchView: View {
                 .padding(.horizontal)
 
                 if isLoading {
-                    ProgressView("Loading real nearby shops and recorded prices…")
+                    ProgressView("Loading real nearby shops and product prices…")
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal)
                 }
@@ -39,7 +39,7 @@ struct ShoppingSearchView: View {
                     ContentUnavailableView {
                         Label("Find real grocery stores", systemImage: "location.magnifyingglass")
                     } description: {
-                        Text("Allow location access, then load nearby shops with crowdsourced product prices.")
+                        Text("Allow location access, then load nearby shops with product prices.")
                     } actions: {
                         Button("Load nearby stores") { Task { await refreshStores() } }
                             .buttonStyle(.borderedProminent)
@@ -73,7 +73,7 @@ struct ShoppingSearchView: View {
                             } header: {
                                 Text("Nearby real stores")
                             } footer: {
-                                Text("Only prices observed during the last 180 days are shown. Data comes from Open Prices / Open Food Facts and is not guaranteed live inventory. Repeated store chains are reduced to the closest location.")
+                                Text("Open Prices supplies nearby crowdsourced observations; OpenPriceEngine adds current Trader Joe's catalog prices when configured. Repeated store chains are reduced to the closest location.")
                             }
                         }
                     }
@@ -120,21 +120,42 @@ struct ShoppingSearchView: View {
         }
         isLoading = true
         errorMessage = nil
+        let requestedItems = query.split(separator: ",").map(String.init)
+        var nearby: [GroceryStore] = []
+        var failures: [String] = []
+
         do {
-            let nearby = try await OpenPricesService.nearbyStores(around: currentLocation)
-            store.stores = nearby
-            if nearby.isEmpty {
-                errorMessage = "No crowdsourced grocery prices were found within 30 km."
-            } else if runSearchAfterLoading {
+            nearby.append(contentsOf: try await OpenPricesService.nearbyStores(around: currentLocation))
+        } catch {
+            failures.append("Open Prices: \(error.localizedDescription)")
+        }
+        if OpenPriceEngineService.isConfigured {
+            do {
+                nearby.append(contentsOf: try await OpenPriceEngineService.nearbyStores(
+                    around: currentLocation,
+                    matching: requestedItems
+                ))
+            } catch {
+                failures.append("OpenPriceEngine: \(error.localizedDescription)")
+            }
+        }
+
+        nearby = OpenPricesService.deduplicatedClosestStores(nearby)
+        store.stores = nearby
+        if nearby.isEmpty {
+            errorMessage = failures.isEmpty
+                ? "No grocery prices were found within 30 km."
+                : "Could not load shop prices. \(failures.joined(separator: " · "))"
+        } else {
+            if !failures.isEmpty { errorMessage = failures.joined(separator: " · ") }
+            if runSearchAfterLoading {
                 plans = ShoppingPlanner.plans(
-                    for: query.split(separator: ",").map(String.init),
+                    for: requestedItems,
                     stores: nearby,
                     preferences: store.preferences,
                     reviews: store.reviews
                 )
             }
-        } catch {
-            errorMessage = "Could not load Open Prices: \(error.localizedDescription)"
         }
         isLoading = false
     }
@@ -155,6 +176,7 @@ private struct NearbyStoreRow: View {
                 Text("\(store.distanceMiles, specifier: "%.1f") mi · \(store.offers.count) recorded prices")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Color.appBlue)
+                if let source = store.source { Text(source).font(.caption2).foregroundStyle(.secondary) }
             }
             Spacer()
             Image(systemName: "chevron.right").foregroundStyle(.tertiary)
@@ -279,12 +301,19 @@ private struct StoreCatalogSheet: View {
             .navigationTitle(store.name)
             .navigationBarTitleDisplayMode(.inline)
             .safeAreaInset(edge: .bottom) {
-                Text("Crowdsourced observations from the last 180 days via Open Prices / Open Food Facts. Availability and current shelf prices are not guaranteed.")
+                Text(sourceNotice)
                     .font(.caption2).foregroundStyle(.secondary).padding(10)
                     .frame(maxWidth: .infinity).background(.bar)
             }
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
         }
+    }
+
+    private var sourceNotice: String {
+        if store.source == OpenPriceEngineService.sourceName {
+            return "Catalog prices supplied by OpenPriceEngine. A listed product or price is not guaranteed at every physical location."
+        }
+        return "Crowdsourced observations from the last 180 days via Open Prices / Open Food Facts. Availability and current shelf prices are not guaranteed."
     }
 }
 

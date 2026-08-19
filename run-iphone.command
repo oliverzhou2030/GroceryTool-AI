@@ -7,6 +7,7 @@ DERIVED_DATA="/tmp/GroceryToolAI-DerivedData"
 DEVICE_NAME="${1:-iPhone 17 Pro}"
 SIMULATOR_LATITUDE="${GROCERYTOOL_LATITUDE:-40.789}"
 SIMULATOR_LONGITUDE="${GROCERYTOOL_LONGITUDE:--73.702}"
+OPENPRICEENGINE_KEY_FILE="$PROJECT_ROOT/.openpricengine-key"
 export DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer"
 
 DEVICE_ID="$(xcrun simctl list devices available | sed -n "s/^[[:space:]]*$DEVICE_NAME (\([0-9A-F-]*\)).*/\1/p" | head -1)"
@@ -22,5 +23,13 @@ xcrun simctl location "$DEVICE_ID" set "$SIMULATOR_LATITUDE,$SIMULATOR_LONGITUDE
 xcodebuild -quiet -project "$PROJECT" -scheme GroceryToolAI -destination "platform=iOS Simulator,id=$DEVICE_ID" -derivedDataPath "$DERIVED_DATA" build CODE_SIGNING_ALLOWED=NO
 xcrun simctl install "$DEVICE_ID" "$DERIVED_DATA/Build/Products/Debug-iphonesimulator/GroceryToolAI.app"
 open -a Simulator
-xcrun simctl launch --terminate-running-process "$DEVICE_ID" com.oliverzhou2030.GroceryToolAI
+if [[ -r "$OPENPRICEENGINE_KEY_FILE" ]]; then
+  OPENPRICEENGINE_API_KEY="$(<"$OPENPRICEENGINE_KEY_FILE")"
+  SIMCTL_CHILD_OPENPRICEENGINE_API_KEY="$OPENPRICEENGINE_API_KEY" \
+    xcrun simctl launch --terminate-running-process "$DEVICE_ID" com.oliverzhou2030.GroceryToolAI
+  print "OpenPriceEngine: configured"
+else
+  xcrun simctl launch --terminate-running-process "$DEVICE_ID" com.oliverzhou2030.GroceryToolAI
+  print "OpenPriceEngine: not configured (add the key to $OPENPRICEENGINE_KEY_FILE)"
+fi
 print "Simulator location: $SIMULATOR_LATITUDE, $SIMULATOR_LONGITUDE"
