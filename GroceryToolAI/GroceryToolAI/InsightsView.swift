@@ -1,11 +1,17 @@
 import SwiftUI
 import Charts
+#if os(macOS)
+import AppKit
+#endif
 
 struct InsightsView: View {
     @EnvironmentObject private var store: AppStore
     @State private var start = Calendar.current.date(byAdding: .month, value: -1, to: .now)!
     @State private var end = Date.now
     @State private var chartStyle = InsightChartStyle.bar
+#if os(macOS)
+    @State private var showSheetsImportNotice = false
+#endif
 
     private var analytics: SpendingAnalytics {
         AnalyticsService.analyze(store.receipts, from: start, through: end)
@@ -58,24 +64,58 @@ struct InsightsView: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                     Spacer()
-                    if let url = store.exportURL(for: analytics.receipts) {
+                    let title = store.spreadsheetTitle(from: start, through: end)
+#if os(macOS)
+                    Button {
+                        openGoogleSheets(title: title)
+                    } label: {
+                        Label("Open Google Sheets", systemImage: "tablecells")
+                    }
+                    .buttonStyle(.borderedProminent)
+#else
+                    if let url = store.exportURL(for: analytics.receipts, title: title) {
                         ShareLink(
                             item: url,
-                            preview: SharePreview("GroceryTool AI receipt ledger")
+                            preview: SharePreview(title)
                         ) {
                             Label("Export CSV for Sheets", systemImage: "tablecells")
                         }
                             .buttonStyle(.borderedProminent)
                     }
+#endif
                 }
-                Text("On iPhone, choose Google Drive or Google Sheets in the share menu. On Mac, save the CSV and import it at sheets.google.com.")
+                Group {
+#if os(macOS)
+                    Text("The named CSV is prepared and Google Sheets opens in your browser. Automatic creation in your Google account requires Google OAuth permission.")
+#else
+                    Text("Choose Google Drive or Google Sheets in the share menu.")
+#endif
+                }
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .frame(maxWidth: .infinity)
+#if os(macOS)
+        .alert("CSV ready for Google Sheets", isPresented: $showSheetsImportNotice) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("The file uses the name \(store.spreadsheetTitle(from: start, through: end)). Google authorization is still needed before GroceryTool AI can create and fill the online sheet automatically.")
+        }
+#endif
     }
+
+#if os(macOS)
+    private func openGoogleSheets(title: String) {
+        guard let csvURL = store.exportURL(for: analytics.receipts, title: title) else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([csvURL])
+        if let sheetsURL = URL(string: "https://sheets.new") {
+            NSWorkspace.shared.open(sheetsURL)
+        }
+        showSheetsImportNotice = true
+    }
+#endif
 
     private var metrics: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 155))], spacing: 14) {

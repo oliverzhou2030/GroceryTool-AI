@@ -114,8 +114,18 @@ final class AppStore: ObservableObject {
         guard let username = currentUsername else { return }
         reviews.append(StoreReview(storeName: storeName, username: username, rating: min(5, max(1, rating)), comment: comment.trimmingCharacters(in: .whitespacesAndNewlines)))
     }
-    func exportURL(for receipts: [GroceryReceipt]) -> URL? {
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("GroceryLedger-\(Date().formatted(.iso8601.year().month().day())).csv")
+    func spreadsheetTitle(from start: Date, through end: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        let username = currentUsername ?? "User"
+        return "\(username) \(formatter.string(from: start)) to \(formatter.string(from: end))"
+    }
+    func exportURL(for receipts: [GroceryReceipt], title: String? = nil) -> URL? {
+        let requestedTitle = title ?? "GroceryLedger-\(Date().formatted(.iso8601.year().month().day()))"
+        let invalid = CharacterSet(charactersIn: "/\\:?%*|\"<>")
+        let filename = requestedTitle.components(separatedBy: invalid).joined(separator: "-")
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(filename).csv")
         do { try SpreadsheetExporter.csv(receipts: receipts).write(to: url, atomically: true, encoding: .utf8); return url } catch { return nil }
     }
 

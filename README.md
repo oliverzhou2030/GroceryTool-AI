@@ -66,7 +66,7 @@ On first sign-in, allow current-location access to enter the iPhone app. For dev
 
 Receipt history starts empty. Choose receipt images from Photos, import an image/PDF from Files, or enter a receipt manually. Select any saved receipt to inspect its clean bill, and swipe it or use the trash button to delete it.
 
-In Calendar, tap as many dates as needed; tapping a selected date again removes it from the selection. In Insights, choose **Export CSV for Sheets** and share it to Google Drive/Google Sheets on iPhone, or import the saved CSV at Google Sheets on Mac.
+In Calendar, tap as many dates as needed; tapping a selected date again removes it from the selection. In Insights, choose **Export CSV for Sheets** on iPhone. On Mac, **Open Google Sheets** prepares a CSV named `username YYYY-MM-DD to YYYY-MM-DD.csv`, reveals it in Finder, and opens Google Sheets in the browser. Creating and filling a Google Sheet in the user's account without the import step requires Google OAuth credentials and the Google Sheets API.
 
 The Shop tab reads the public Open Prices / Open Food Facts API without an API key. Its prices are crowdsourced observations from the last 180 days and therefore include a “last seen” date; they must not be treated as guaranteed live shelf inventory. Repeated chain locations are reduced to the closest store.
 
