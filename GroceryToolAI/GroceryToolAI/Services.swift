@@ -241,7 +241,7 @@ enum ShoppingPlanner {
         }
         var results: [ShoppingPlan] = []
         for store in stores {
-            let matched = wanted.compactMap { query in store.offers.first { $0.product.lowercased().contains(query) } }
+            let matched = wanted.compactMap { query in bestMatch(in: store.offers, for: query) }
             if matched.count == wanted.count {
                 let pref = preferences.storeWeights[store.name, default: 0]
                 results.append(ShoppingPlan(title: "One stop at \(store.name)", stops: [PlanStop(store: store, products: matched)], missing: [], substitutions: [:], score: Double(store.travelMinutes) + matched.reduce(0) { $0 + $1.price } - pref * 4 - ratingBonus(store.name), pros: ["Gets everything in one stop", pref > 0 ? "Matches your store preference" : "Simple trip"], cons: store.travelMinutes > 20 ? ["Longer drive"] : []))
@@ -250,8 +250,8 @@ enum ShoppingPlanner {
         for firstIndex in stores.indices { for secondIndex in stores.indices where secondIndex > firstIndex {
             let pair = [stores[firstIndex], stores[secondIndex]]
             var stops: [PlanStop] = []; var missing: [String] = []
-            for store in pair { let found = wanted.compactMap { q in store.offers.first { $0.product.lowercased().contains(q) } }; if !found.isEmpty { stops.append(PlanStop(store: store, products: found)) } }
-            for q in wanted where !stops.flatMap(\.products).contains(where: { $0.product.lowercased().contains(q) }) { missing.append(q) }
+            for store in pair { let found = wanted.compactMap { q in bestMatch(in: store.offers, for: q) }; if !found.isEmpty { stops.append(PlanStop(store: store, products: found)) } }
+            for q in wanted where bestMatch(in: stops.flatMap(\.products), for: q) == nil { missing.append(q) }
             if missing.isEmpty && stops.count == 2 {
                 let preferenceBonus = pair.reduce(0.0) { $0 + preferences.storeWeights[$1.name, default: 0] * 3 + ratingBonus($1.name) }
                 results.append(ShoppingPlan(title: "Split between \(pair[0].name) + \(pair[1].name)", stops: stops, missing: [], substitutions: [:], score: Double(stops.reduce(0) { $0 + $1.store.travelMinutes }) + stops.flatMap(\.products).reduce(0) { $0 + $1.price } - preferenceBonus, pros: ["All requested products available", "May reduce product cost"], cons: ["Requires two stops"]))
@@ -261,7 +261,7 @@ enum ShoppingPlanner {
             for store in stores.sorted(by: { $0.travelMinutes < $1.travelMinutes }) {
                 var subs: [String: String] = [:]; var offers: [ProductOffer] = []; var missing: [String] = []
                 for query in wanted {
-                    if let exact = store.offers.first(where: { $0.product.lowercased().contains(query) }) { offers.append(exact) }
+                    if let exact = bestMatch(in: store.offers, for: query) { offers.append(exact) }
                     else if let alternative = store.offers.first(where: { $0.alternatives.contains(where: { $0.lowercased().contains(query) }) }) { offers.append(alternative); subs[query] = alternative.product }
                     else { missing.append(query) }
                 }
@@ -269,5 +269,51 @@ enum ShoppingPlanner {
             }
         }
         return results.sorted { $0.score < $1.score }
+    }
+
+    private static func bestMatch(in offers: [ProductOffer], for query: String) -> ProductOffer? {
+        offers
+            .filter { productMatches($0.product, query: query) }
+            .min { matchScore($0, query: query) < matchScore($1, query: query) }
+    }
+
+    private static func matchScore(_ offer: ProductOffer, query: String) -> Int {
+        let name = offer.product.lowercased()
+        var score = name.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).count
+        if name == query { score -= 100 }
+        if name.hasPrefix("\(query) ") || name.hasSuffix(" \(query)") { score -= 20 }
+        if query == "milk" {
+            if offer.category == .dairy { score -= 25 }
+            if ["almond", "coconut", "oat", "soy", "chocolate", "yogurt", "candy", "pretzel"].contains(where: name.contains) {
+                score += 100
+            }
+        }
+        return score
+    }
+
+    private static func productMatches(_ product: String, query: String) -> Bool {
+        let productWords = words(in: product)
+        let queryWords = words(in: query)
+        guard !queryWords.isEmpty, productWords.count >= queryWords.count else { return false }
+        if queryWords == ["milk"] {
+            let nonMilkProducts = Set(["bar", "candy", "cheese", "chocolate", "cookie", "cookies", "cream", "dressing", "ice", "mozzarella", "pretzel", "pretzels", "ricotta", "yogurt"])
+            if !nonMilkProducts.isDisjoint(with: productWords) { return false }
+            guard let milkIndex = productWords.firstIndex(of: "milk") else { return false }
+            let followingWords = productWords.dropFirst(milkIndex + 1)
+            if let nextWord = followingWords.first {
+                let liquidMilkDescriptors = Set(["1", "2", "fat", "free", "from", "gallon", "half", "lactose", "percent", "quart", "skim", "whole"])
+                if !liquidMilkDescriptors.contains(nextWord) { return false }
+            }
+        }
+        if queryWords.count == 1 { return productWords.contains(queryWords[0]) }
+        return (0...(productWords.count - queryWords.count)).contains { start in
+            Array(productWords[start..<(start + queryWords.count)]) == queryWords
+        }
+    }
+
+    private static func words(in text: String) -> [String] {
+        text.lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
     }
 }

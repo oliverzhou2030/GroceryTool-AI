@@ -129,6 +129,27 @@ struct GroceryToolAITests {
         #expect(plans.first?.title == "One stop at Complete")
     }
 
+    @Test func plannerPrefersPlainMilkToMilkFlavoredProducts() {
+        let store = GroceryStore(name: "Trader Joe's", travelMinutes: 5, distanceMiles: 1, offers: [
+            ProductOffer(product: "Apricot Mango Greek Whole Milk Yogurt", price: 0.99, category: .dairy),
+            ProductOffer(product: "Milk Chocolate Covered Pretzels", price: 4.29, category: .snack),
+            ProductOffer(product: "Organic Coconut Milk", price: 1.89, category: .dairy),
+            ProductOffer(product: "Traditional Whole Milk Ricotta Cheese", price: 3.99, category: .dairy),
+            ProductOffer(product: "Raw Milk Cave Aged Le Gruyère", price: 19.99, category: .dairy),
+            ProductOffer(product: "Organic Reduced Fat Milk", price: 6.49, category: .dairy)
+        ])
+        let plans = ShoppingPlanner.plans(for: ["milk"], stores: [store], preferences: UserPreferences())
+        #expect(plans.first?.stops.first?.products.first?.product == "Organic Reduced Fat Milk")
+    }
+
+    @Test func plannerDoesNotTreatButtermilkAsMilk() {
+        let store = GroceryStore(name: "ShopRite", travelMinutes: 5, distanceMiles: 1, offers: [
+            ProductOffer(product: "Buttermilk Ranch Dressing", price: 3.49, category: .pantry)
+        ])
+        let plans = ShoppingPlanner.plans(for: ["milk"], stores: [store], preferences: UserPreferences())
+        #expect(plans.isEmpty)
+    }
+
     @Test func nearbyStoresKeepOnlyClosestRepeatedChain() {
         let farther = GroceryStore(name: "ShopRite", travelMinutes: 20, distanceMiles: 8, offers: [
             ProductOffer(product: "Milk", price: 4, category: .dairy)

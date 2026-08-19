@@ -119,9 +119,17 @@ enum OpenPricesService {
         if ["coca-cola", "coca cola", "pepsi", "cola"].contains(where: name.contains) {
             return ["Coca-Cola", "Pepsi", "cola"]
         }
-        if name.contains("milk") { return ["milk"] }
+        let words = name.components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty }
+        if isLiquidMilkName(words) { return ["milk"] }
         if ["potato chips", "corn chips", "tortilla chips"].contains(where: name.contains) { return ["chips"] }
         return []
+    }
+
+    private static func isLiquidMilkName(_ words: [String]) -> Bool {
+        let nonMilkProducts = Set(["bar", "candy", "cheese", "chocolate", "cookie", "cookies", "cream", "dressing", "ice", "mozzarella", "pretzel", "pretzels", "ricotta", "yogurt"])
+        guard nonMilkProducts.isDisjoint(with: words), let milkIndex = words.firstIndex(of: "milk") else { return false }
+        guard let nextWord = words.dropFirst(milkIndex + 1).first else { return true }
+        return Set(["1", "2", "fat", "free", "from", "gallon", "half", "lactose", "percent", "quart", "skim", "whole"]).contains(nextWord)
     }
 }
 

@@ -40,13 +40,9 @@ enum OpenPriceEngineService {
     }
 
     static func offers(matching requestedItems: [String]) async throws -> [ProductOffer] {
-        let responses = try await withThrowingTaskGroup(of: [OpenPriceProduct].self) { group in
-            for item in requestedItems {
-                group.addTask { try await requestProducts(matching: item) }
-            }
-            var products: [OpenPriceProduct] = []
-            for try await response in group { products.append(contentsOf: response) }
-            return products
+        var responses: [OpenPriceProduct] = []
+        for item in requestedItems {
+            responses.append(contentsOf: try await requestProducts(matching: item))
         }
 
         var newestByName: [String: ProductOffer] = [:]
@@ -87,8 +83,12 @@ enum OpenPriceEngineService {
         request.setValue(apiKey, forHTTPHeaderField: "Authorization")
         request.timeoutInterval = 20
         let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            throw URLError(.userAuthenticationRequired)
+        guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
+        if http.statusCode == 404 { return [] }
+        guard (200..<300).contains(http.statusCode) else {
+            let detail = (try? JSONDecoder().decode(OpenPriceErrorResponse.self, from: data).detail)
+                ?? HTTPURLResponse.localizedString(forStatusCode: http.statusCode)
+            throw OpenPriceEngineError.requestFailed(statusCode: http.statusCode, detail: detail)
         }
         return try JSONDecoder().decode([OpenPriceProduct].self, from: data)
     }
@@ -125,10 +125,33 @@ enum OpenPriceEngineService {
         if ["coca-cola", "coca cola", "pepsi", "cola"].contains(where: name.contains) {
             return ["Coca-Cola", "Pepsi", "cola"]
         }
-        if name.contains("milk") { return ["milk"] }
+        let words = name.components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty }
+        if isLiquidMilkName(words) { return ["milk"] }
         if ["potato chips", "corn chips", "tortilla chips"].contains(where: name.contains) { return ["chips"] }
         return []
     }
+
+    private static func isLiquidMilkName(_ words: [String]) -> Bool {
+        let nonMilkProducts = Set(["bar", "candy", "cheese", "chocolate", "cookie", "cookies", "cream", "dressing", "ice", "mozzarella", "pretzel", "pretzels", "ricotta", "yogurt"])
+        guard nonMilkProducts.isDisjoint(with: words), let milkIndex = words.firstIndex(of: "milk") else { return false }
+        guard let nextWord = words.dropFirst(milkIndex + 1).first else { return true }
+        return Set(["1", "2", "fat", "free", "from", "gallon", "half", "lactose", "percent", "quart", "skim", "whole"]).contains(nextWord)
+    }
+}
+
+private enum OpenPriceEngineError: LocalizedError {
+    case requestFailed(statusCode: Int, detail: String)
+
+    var errorDescription: String? {
+        switch self {
+        case let .requestFailed(statusCode, detail):
+            return "Request failed (HTTP \(statusCode)): \(detail)"
+        }
+    }
+}
+
+private struct OpenPriceErrorResponse: Decodable {
+    let detail: String
 }
 
 private struct OpenPriceProduct: Decodable {
