@@ -44,8 +44,8 @@ struct GroceryToolAITests {
         #expect(receipt.merchant == "J-Mart Little Neck")
         #expect(receipt.items.count == 6)
         #expect(receipt.items.first?.category == .snack)
-        #expect(receipt.items.first(where: { $0.name.contains("Enoki") })?.category == .produce)
-        #expect(receipt.items.first(where: { $0.name.contains("Samyang") })?.category == .pantry)
+        #expect(receipt.items.first(where: { $0.name.contains("Enoki") })?.category == .vegetable)
+        #expect(receipt.items.first(where: { $0.name.contains("Samyang") })?.category == .grain)
         #expect(receipt.items.first(where: { $0.name.contains("Reddi") })?.category == .dairy)
         #expect(receipt.total == 33.88)
         #expect(Calendar.current.component(.year, from: receipt.date) == 2026)
@@ -155,17 +155,28 @@ struct GroceryToolAITests {
         #expect(!names.contains(where: { $0.contains("net sales") || $0.contains("sold items") || $0.contains("returns") || $0 == "visa" }))
         #expect(receipt.items.filter { $0.category == .deposit }.count == 3)
         #expect(receipt.items.filter { $0.category == .deposit }.allSatisfy { $0.name == "Container Deposit" })
+        #expect(receipt.items.first(where: { $0.name.localizedCaseInsensitiveContains("watermelon") })?.category == .fruit)
+        #expect(receipt.items.first(where: { $0.name.localizedCaseInsensitiveContains("peach") })?.category == .fruit)
+        #expect(receipt.items.first(where: { $0.name.localizedCaseInsensitiveContains("asparagus") })?.category == .vegetable)
+        #expect(receipt.items.first(where: { $0.name.localizedCaseInsensitiveContains("spring water") })?.category == .water)
+        #expect(receipt.items.first(where: { $0.name.localizedCaseInsensitiveContains("coffee") })?.category == .beverage)
+        #expect(receipt.items.filter { $0.name.localizedCaseInsensitiveContains("jam") }.allSatisfy { $0.category == .condiment })
         #expect(abs(receipt.subtotal - 93.89) < 0.001)
         #expect(abs(receipt.tax - 0.59) < 0.001)
         #expect(abs(receipt.total - 94.48) < 0.001)
     }
 
+    @Test func legacyBroadCategoriesDecodeWithoutLosingSavedData() throws {
+        #expect(try JSONDecoder().decode(GroceryCategory.self, from: Data("\"Produce\"".utf8)) == .vegetable)
+        #expect(try JSONDecoder().decode(GroceryCategory.self, from: Data("\"Pantry\"".utf8)) == .other)
+    }
+
     @Test func cleanReceiptPDFIncludesEveryDetailPage() throws {
         var receipt = SampleData.receipts[0]
         receipt.items = (1...31).map {
-            ReceiptItem(name: "Grocery item \($0)", category: .pantry, unitPrice: 1, total: 1)
+            ReceiptItem(name: "Grocery item \($0)", category: .other, unitPrice: 1, total: 1)
         }
-        let pdf = try #require(ReceiptPDFRenderer.render(receipt: receipt, cleanedImageData: nil))
+        let pdf = try #require(ReceiptPDFRenderer.render(receipt: receipt, receiptImageData: nil))
         #expect(String(decoding: pdf.prefix(4), as: UTF8.self) == "%PDF")
         #expect(PDFDocument(data: pdf)?.pageCount == 3)
     }
@@ -194,7 +205,7 @@ struct GroceryToolAITests {
         let calendar = Calendar(identifier: .gregorian)
         let now = try #require(calendar.date(from: DateComponents(year: 2026, month: 8, day: 19, hour: 12)))
         let current = GroceryReceipt(merchant: "Current", date: now, items: [ReceiptItem(name: "Milk", category: .dairy, unitPrice: 25, total: 25)])
-        let old = GroceryReceipt(merchant: "Old", date: try #require(calendar.date(byAdding: .month, value: -1, to: now)), items: [ReceiptItem(name: "Rice", category: .pantry, unitPrice: 100, total: 100)])
+        let old = GroceryReceipt(merchant: "Old", date: try #require(calendar.date(byAdding: .month, value: -1, to: now)), items: [ReceiptItem(name: "Rice", category: .grain, unitPrice: 100, total: 100)])
         let budget = GroceryBudget(isEnabled: true, amount: 300, periodLength: 1, periodUnit: .month)
         let status = try #require(GroceryBudgetService.status(for: budget, receipts: [current, old], now: now, calendar: calendar))
         #expect(status.spent == 25)
@@ -255,7 +266,7 @@ struct GroceryToolAITests {
 
     @Test func plannerDoesNotTreatButtermilkAsMilk() {
         let store = GroceryStore(name: "ShopRite", travelMinutes: 5, distanceMiles: 1, offers: [
-            ProductOffer(product: "Buttermilk Ranch Dressing", price: 3.49, category: .pantry)
+            ProductOffer(product: "Buttermilk Ranch Dressing", price: 3.49, category: .condiment)
         ])
         let plans = ShoppingPlanner.plans(for: ["milk"], stores: [store], preferences: UserPreferences())
         #expect(plans.isEmpty)
@@ -283,13 +294,13 @@ struct GroceryToolAITests {
 
     @Test func categoryCorrectionsPersistAndBecomeDefaults() throws {
         var preferences = UserPreferences()
-        preferences.learnCategory(itemName: "Nestle KitKat Green Tea", category: .pantry)
+        preferences.learnCategory(itemName: "Nestle KitKat Green Tea", category: .condiment)
         preferences.language = .simplifiedChinese
-        #expect(preferences.learnedCategory(for: "NESTLE KITKAT GREEN-TEA") == .pantry)
+        #expect(preferences.learnedCategory(for: "NESTLE KITKAT GREEN-TEA") == .condiment)
 
         let encoded = try JSONEncoder().encode(preferences)
         let restored = try JSONDecoder().decode(UserPreferences.self, from: encoded)
-        #expect(restored.learnedCategory(for: "Nestle KitKat Green Tea") == .pantry)
+        #expect(restored.learnedCategory(for: "Nestle KitKat Green Tea") == .condiment)
         #expect(restored.language == .simplifiedChinese)
     }
 }

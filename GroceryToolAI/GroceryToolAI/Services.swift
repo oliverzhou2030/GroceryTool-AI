@@ -77,15 +77,26 @@ enum ReceiptCleaner {
         let text = name.lowercased()
         if ["container deposit", "bottle deposit", "can deposit", "refundable deposit", "redemption value", "crv fee"].contains(where: text.contains) { return .deposit }
         if ["kitkat", "kit kat", "chocolate", "chip", "cookie", "candy", "snack", "cracker", "biscuit", "wafer", "gummy", "popcorn"].contains(where: text.contains) { return .snack }
-        if ["milk", "cheese", "yogurt", "cream", "reddi wip", "whipped", "butter", "egg"].contains(where: text.contains) { return .dairy }
-        if ["cola", "soda", "water", "juice", "coffee", "tea", "drink", "beverage", "cider"].contains(where: text.contains) { return .beverage }
-        if ["mushroom", "enoki", "apple", "banana", "lettuce", "onion", "fruit", "vegetable", "tomato", "potato", "carrot", "broccoli", "spinach", "avocado"].contains(where: text.contains) { return .produce }
-        if ["ramen", " rame", "samyang", "noodle", "rice", "pasta", "sauce", "bamboo shoot", "cereal", "flour", "sugar", "oil"].contains(where: text.contains) { return .pantry }
-        if ["bread", "bagel", "muffin", "croissant", "cake", "bakery"].contains(where: text.contains) { return .bakery }
-        if ["beef", "chicken", "pork", "fish", "salmon", "shrimp", "turkey", "lamb"].contains(where: text.contains) { return .meat }
+        if ["watermelon", "apple", "banana", "peach", "berry", "strawberry", "raspberry", "blueberry", "orange", "lemon", "lime", "grape", "mango", "pineapple", "pear", "cherry", "avocado", "fruit"].contains(where: text.contains) { return .fruit }
+        if ["mushroom", "enoki", "lettuce", "onion", "tomato", "potato", "carrot", "broccoli", "spinach", "asparagus", "bamboo shoot", "cabbage", "pepper", "cucumber", "celery", "squash", "vegetable", "veggie"].contains(where: text.contains) { return .vegetable }
+        if containsWholeWord("water", in: text) || ["spring water", "mineral water", "sparkling water", "purified water", "seltzer"].contains(where: text.contains) { return .water }
         if ["frozen", "ice cream", "pizza"].contains(where: text.contains) { return .frozen }
+        if ["rotisserie", "ready meal", "deli", "salad", "sushi", "sandwich", "prepared"].contains(where: text.contains) { return .prepared }
+        if ["sauce", "jam", "jelly", "mustard", "ketchup", "mayonnaise", "mayo", "dressing", "oil", "vinegar", "seasoning", "spice"].contains(where: text.contains) { return .condiment }
+        if ["canned", "jarred", "preserves", "canned soup"].contains(where: text.contains) { return .canned }
+        if ["ramen", " rame", "samyang", "noodle", "rice", "pasta", "cereal", "flour", "oats", "grain", "sugar"].contains(where: text.contains) { return .grain }
+        if ["egg", "eggs"].contains(where: text.contains) { return .eggs }
+        if ["milk", "cheese", "yogurt", "cream", "brie", "reddi wip", "whipped", "butter"].contains(where: text.contains) { return .dairy }
+        if ["fish", "salmon", "shrimp", "tuna", "crab", "lobster", "seafood"].contains(where: text.contains) { return .seafood }
+        if ["beef", "chicken", "pork", "turkey", "lamb", "sausage", "bacon", "ground meat", "meat"].contains(where: text.contains) { return .meat }
+        if ["cola", "soda", "juice", "coffee", "tea", "drink", "beverage", "cider"].contains(where: text.contains) { return .beverage }
+        if ["bread", "bagel", "muffin", "croissant", "cake", "bakery"].contains(where: text.contains) { return .bakery }
         if ["soap", "detergent", "tissue", "paper towel", "cleaner", "trash bag", "shampoo"].contains(where: text.contains) { return .household }
-        return .pantry
+        return .other
+    }
+
+    private static func containsWholeWord(_ word: String, in text: String) -> Bool {
+        text.range(of: "\\b\(NSRegularExpression.escapedPattern(for: word))\\b", options: .regularExpression) != nil
     }
 
     private static func moneyValue(in text: String) -> Double? {

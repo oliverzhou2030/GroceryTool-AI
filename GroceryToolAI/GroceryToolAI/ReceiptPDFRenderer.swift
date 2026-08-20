@@ -6,11 +6,25 @@ import ImageIO
 enum ReceiptPDFRenderer {
     private static let pageBox = CGRect(x: 0, y: 0, width: 612, height: 792)
 
-    static func render(receipt: GroceryReceipt, cleanedImageData: Data?) -> Data? {
+    static func render(receipt: GroceryReceipt, receiptImageData: Data?) -> Data? {
         let data = NSMutableData()
         var mediaBox = pageBox
         guard let consumer = CGDataConsumer(data: data as CFMutableData),
               let context = CGContext(consumer: consumer, mediaBox: &mediaBox, nil) else { return nil }
+
+        if let receiptImageData,
+           let source = CGImageSourceCreateWithData(receiptImageData as CFData, nil),
+           let image = CGImageSourceCreateImageAtIndex(source, 0, nil) {
+            context.beginPDFPage(nil)
+            context.setFillColor(CGColor(gray: 1, alpha: 1))
+            context.fill(pageBox)
+            let available = CGRect(x: 24, y: 24, width: 564, height: 744)
+            let scale = min(available.width / CGFloat(image.width), available.height / CGFloat(image.height))
+            let size = CGSize(width: CGFloat(image.width) * scale, height: CGFloat(image.height) * scale)
+            let rect = CGRect(x: available.midX - size.width / 2, y: available.midY - size.height / 2, width: size.width, height: size.height)
+            context.draw(image, in: rect)
+            context.endPDFPage()
+        }
 
         let itemsPerPage = 15
         let detailsPageCount = max(1, Int(ceil(Double(receipt.items.count) / Double(itemsPerPage))))
@@ -27,17 +41,6 @@ enum ReceiptPDFRenderer {
                 isLastDetailsPage: pageIndex == detailsPageCount - 1,
                 in: context
             )
-            context.endPDFPage()
-        }
-
-        if let cleanedImageData, let source = CGImageSourceCreateWithData(cleanedImageData as CFData, nil), let image = CGImageSourceCreateImageAtIndex(source, 0, nil) {
-            context.beginPDFPage(nil)
-            drawText("Straightened receipt scan", x: 42, y: 754, size: 20, weight: .bold, color: CGColor(red: 0.12, green: 0.45, blue: 0.72, alpha: 1), in: context)
-            let available = CGRect(x: 36, y: 36, width: 540, height: 690)
-            let scale = min(available.width / CGFloat(image.width), available.height / CGFloat(image.height))
-            let size = CGSize(width: CGFloat(image.width) * scale, height: CGFloat(image.height) * scale)
-            let rect = CGRect(x: available.midX - size.width / 2, y: available.midY - size.height / 2, width: size.width, height: size.height)
-            context.draw(image, in: rect)
             context.endPDFPage()
         }
 

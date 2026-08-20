@@ -1,4 +1,5 @@
 import SwiftUI
+import Charts
 import PhotosUI
 import UniformTypeIdentifiers
 import PDFKit
@@ -143,6 +144,16 @@ struct ReceiptDetailView: View {
     @State private var confirmingDelete = false
     @State private var documentMode = ReceiptDocumentMode.pdf
     @State private var showingFullImage = false
+    @State private var chartStyle = ReceiptChartStyle.bar
+
+    private var categoryChartData: [ReceiptCategoryDatum] {
+        let includedItems = receipt.items.filter { ![GroceryCategory.household, .deposit, .other].contains($0.category) }
+        return Dictionary(grouping: includedItems, by: \.category)
+            .map { category, items in
+                ReceiptCategoryDatum(category: category, amount: items.reduce(0) { $0 + $1.total })
+            }
+            .sorted { $0.amount > $1.amount }
+    }
 
     private var displayedDocumentURL: URL? {
         switch documentMode {
@@ -201,6 +212,38 @@ struct ReceiptDetailView: View {
                     .listRowBackground(item.category == .deposit ? Color.refundableDepositBackground : Color.clear)
                 }
             }
+            if !categoryChartData.isEmpty {
+                Section("Category breakdown") {
+                    Picker("Chart style", selection: $chartStyle) {
+                        Label("Bar", systemImage: "chart.bar.fill").tag(ReceiptChartStyle.bar)
+                        Label("Pie", systemImage: "chart.pie.fill").tag(ReceiptChartStyle.pie)
+                    }
+                    .pickerStyle(.segmented)
+                    if chartStyle == .pie {
+                        Chart(categoryChartData) { datum in
+                            SectorMark(angle: .value("Spend", datum.amount), innerRadius: .ratio(0.48), angularInset: 2)
+                                .cornerRadius(4)
+                                .foregroundStyle(by: .value("Category", datum.category.rawValue))
+                        }
+                        .chartLegend(position: .bottom, alignment: .leading, spacing: 8)
+                        .frame(height: 260)
+                    } else {
+                        Chart(categoryChartData) { datum in
+                            BarMark(x: .value("Spend", datum.amount), y: .value("Category", datum.category.rawValue))
+                                .foregroundStyle(by: .value("Category", datum.category.rawValue))
+                                .cornerRadius(5)
+                                .annotation(position: .trailing) {
+                                    Text(datum.amount, format: .currency(code: "USD"))
+                                        .font(.caption2).monospacedDigit()
+                                }
+                        }
+                        .chartLegend(.hidden)
+                        .frame(height: max(210, CGFloat(categoryChartData.count * 45)))
+                    }
+                    Text("Spending by carefully classified food type")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
             Section {
                 LabeledContent("Subtotal", value: receipt.subtotal.formatted(.currency(code: "USD")))
                 LabeledContent("Tax", value: receipt.tax.formatted(.currency(code: "USD")))
@@ -228,10 +271,18 @@ struct ReceiptDetailView: View {
 
     private var documentDescription: String {
         switch documentMode {
-        case .pdf: "Formatted receipt PDF with store, date, categorized items, totals, and a straightened scan"
+        case .pdf: "Original receipt image followed directly by the categorized clean bill and totals"
         case .original: "Original imported receipt"
         }
     }
+}
+
+private enum ReceiptChartStyle { case bar, pie }
+
+private struct ReceiptCategoryDatum: Identifiable {
+    let category: GroceryCategory
+    let amount: Double
+    var id: GroceryCategory { category }
 }
 
 private enum ReceiptDocumentMode: String, CaseIterable, Identifiable {

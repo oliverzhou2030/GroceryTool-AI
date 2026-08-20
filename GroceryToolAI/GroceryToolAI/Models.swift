@@ -62,11 +62,32 @@ struct StoreReview: Identifiable, Codable, Hashable {
 }
 
 enum GroceryCategory: String, Codable, CaseIterable, Identifiable {
-    case produce = "Produce", dairy = "Dairy", meat = "Meat", pantry = "Pantry"
-    case frozen = "Frozen", bakery = "Bakery", beverage = "Beverages"
-    case snack = "Snacks", household = "Household", deposit = "Refundable Deposit", other = "Other"
+    case fruit = "Fruit", vegetable = "Vegetables", meat = "Meat", seafood = "Seafood"
+    case dairy = "Dairy", eggs = "Eggs", water = "Water", beverage = "Beverages"
+    case snack = "Snacks", bakery = "Bakery", grain = "Grains & Pasta"
+    case condiment = "Sauces & Condiments", canned = "Canned & Jarred"
+    case frozen = "Frozen", prepared = "Prepared Foods", household = "Household"
+    case deposit = "Refundable Deposit", other = "Other"
     var id: String { rawValue }
     var isFood: Bool { ![.snack, .household, .deposit, .other].contains(self) }
+
+    init(from decoder: Decoder) throws {
+        let value = try decoder.singleValueContainer().decode(String.self)
+        switch value {
+        case "Produce": self = .vegetable
+        case "Pantry": self = .other
+        default:
+            guard let category = Self(rawValue: value) else {
+                throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Unknown grocery category: \(value)"))
+            }
+            self = category
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
 }
 
 struct ReceiptItem: Identifiable, Codable, Hashable {
@@ -141,7 +162,8 @@ struct UserPreferences: Codable, Equatable {
     var theme: AppTheme = .system
     var language: AppLanguage = .english
     var groceryBudget = GroceryBudget()
-    init(storeWeights: [String: Double] = [:], categorySpend: [GroceryCategory: Double] = [:], categoryOverrides: [String: GroceryCategory] = [:], selectedPlans: Int = 0, theme: AppTheme = .system, language: AppLanguage = .english, groceryBudget: GroceryBudget = GroceryBudget()) {
+    var categoryTaxonomyVersion = 0
+    init(storeWeights: [String: Double] = [:], categorySpend: [GroceryCategory: Double] = [:], categoryOverrides: [String: GroceryCategory] = [:], selectedPlans: Int = 0, theme: AppTheme = .system, language: AppLanguage = .english, groceryBudget: GroceryBudget = GroceryBudget(), categoryTaxonomyVersion: Int = 0) {
         self.storeWeights = storeWeights
         self.categorySpend = categorySpend
         self.categoryOverrides = categoryOverrides
@@ -149,8 +171,9 @@ struct UserPreferences: Codable, Equatable {
         self.theme = theme
         self.language = language
         self.groceryBudget = groceryBudget
+        self.categoryTaxonomyVersion = categoryTaxonomyVersion
     }
-    private enum CodingKeys: String, CodingKey { case storeWeights, categorySpend, categoryOverrides, selectedPlans, theme, language, groceryBudget }
+    private enum CodingKeys: String, CodingKey { case storeWeights, categorySpend, categoryOverrides, selectedPlans, theme, language, groceryBudget, categoryTaxonomyVersion }
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         storeWeights = try container.decodeIfPresent([String: Double].self, forKey: .storeWeights) ?? [:]
@@ -160,6 +183,7 @@ struct UserPreferences: Codable, Equatable {
         theme = try container.decodeIfPresent(AppTheme.self, forKey: .theme) ?? .system
         language = try container.decodeIfPresent(AppLanguage.self, forKey: .language) ?? .english
         groceryBudget = try container.decodeIfPresent(GroceryBudget.self, forKey: .groceryBudget) ?? GroceryBudget()
+        categoryTaxonomyVersion = try container.decodeIfPresent(Int.self, forKey: .categoryTaxonomyVersion) ?? 0
     }
     mutating func record(plan: ShoppingPlan) {
         selectedPlans += 1

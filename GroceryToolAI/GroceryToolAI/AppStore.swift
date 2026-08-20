@@ -5,7 +5,8 @@ import CryptoKit
 
 @MainActor
 final class AppStore: ObservableObject {
-    private static let documentProcessingVersion = 2
+    private static let documentProcessingVersion = 3
+    private static let categoryTaxonomyVersion = 1
     @Published var receipts: [GroceryReceipt] = [] { didSet { save() } }
     @Published var preferences = UserPreferences() { didSet { save() } }
     @Published var stores: [GroceryStore] = []
@@ -36,6 +37,8 @@ final class AppStore: ObservableObject {
         isLoading = false
         removeLegacySampleReceipt()
         seedAdminAccount()
+        upgradeCategoryTaxonomy()
+        removeObsoleteCleanedImages()
         upgradeReceiptDocuments()
         startFileSync()
     }
@@ -45,19 +48,15 @@ final class AppStore: ObservableObject {
         var savedReceipt = receipt
         if let images {
             let originalName = "\(receipt.id.uuidString)-original.jpg"
-            let cleanedName = "\(receipt.id.uuidString)-cleaned.jpg"
             do {
                 try images.original.write(to: imagesDirectory.appendingPathComponent(originalName), options: .atomic)
-                try images.cleaned.write(to: imagesDirectory.appendingPathComponent(cleanedName), options: .atomic)
                 savedReceipt.originalImageFilename = originalName
-                savedReceipt.cleanedImageFilename = cleanedName
             } catch {
                 try? FileManager.default.removeItem(at: imagesDirectory.appendingPathComponent(originalName))
-                try? FileManager.default.removeItem(at: imagesDirectory.appendingPathComponent(cleanedName))
             }
         }
         let pdfName = "\(receipt.id.uuidString)-clean-receipt.pdf"
-        if let pdf = ReceiptPDFRenderer.render(receipt: savedReceipt, cleanedImageData: images?.cleaned) {
+        if let pdf = ReceiptPDFRenderer.render(receipt: savedReceipt, receiptImageData: images?.original) {
             try? pdf.write(to: imagesDirectory.appendingPathComponent(pdfName), options: .atomic)
             savedReceipt.pdfFilename = pdfName
         }
@@ -246,21 +245,43 @@ final class AppStore: ObservableObject {
             try? FileManager.default.removeItem(at: imagesDirectory.appendingPathComponent(filename))
         }
     }
+    private func upgradeCategoryTaxonomy() {
+        guard preferences.categoryTaxonomyVersion < Self.categoryTaxonomyVersion else { return }
+        var updatedReceipts = receipts
+        for receiptIndex in updatedReceipts.indices {
+            for itemIndex in updatedReceipts[receiptIndex].items.indices {
+                let itemName = updatedReceipts[receiptIndex].items[itemIndex].name
+                updatedReceipts[receiptIndex].items[itemIndex].category = preferences.learnedCategory(for: itemName) ?? ReceiptCleaner.category(for: itemName)
+            }
+            updatedReceipts[receiptIndex].documentProcessingVersion = 0
+        }
+        var updatedPreferences = preferences
+        updatedPreferences.categoryTaxonomyVersion = Self.categoryTaxonomyVersion
+        preferences = updatedPreferences
+        if updatedReceipts != receipts { receipts = updatedReceipts }
+    }
+    private func removeObsoleteCleanedImages() {
+        var updatedReceipts = receipts
+        var changed = false
+        for index in updatedReceipts.indices {
+            guard let filename = updatedReceipts[index].cleanedImageFilename else { continue }
+            try? FileManager.default.removeItem(at: imagesDirectory.appendingPathComponent(filename))
+            updatedReceipts[index].cleanedImageFilename = nil
+            changed = true
+        }
+        if changed { receipts = updatedReceipts }
+    }
     private func upgradeReceiptDocuments() {
         var updated = receipts
         var changed = false
         for index in updated.indices where (updated[index].documentProcessingVersion ?? 0) < Self.documentProcessingVersion {
             let filename = updated[index].pdfFilename ?? "\(updated[index].id.uuidString)-clean-receipt.pdf"
-            var cleanedData = imageURL(filename: updated[index].cleanedImageFilename).flatMap { try? Data(contentsOf: $0) }
-            if let originalURL = imageURL(filename: updated[index].originalImageFilename),
-               let originalData = try? Data(contentsOf: originalURL),
-               let images = try? ReceiptImageProcessor.prepare(imageData: originalData) {
-                let cleanedName = updated[index].cleanedImageFilename ?? "\(updated[index].id.uuidString)-cleaned.jpg"
-                try? images.cleaned.write(to: imagesDirectory.appendingPathComponent(cleanedName), options: .atomic)
-                updated[index].cleanedImageFilename = cleanedName
-                cleanedData = images.cleaned
+            let receiptImageData = imageURL(filename: updated[index].originalImageFilename).flatMap { try? Data(contentsOf: $0) }
+            if let cleanedName = updated[index].cleanedImageFilename {
+                try? FileManager.default.removeItem(at: imagesDirectory.appendingPathComponent(cleanedName))
+                updated[index].cleanedImageFilename = nil
             }
-            if let pdf = ReceiptPDFRenderer.render(receipt: updated[index], cleanedImageData: cleanedData) {
+            if let pdf = ReceiptPDFRenderer.render(receipt: updated[index], receiptImageData: receiptImageData) {
                 try? pdf.write(to: imagesDirectory.appendingPathComponent(filename), options: .atomic)
                 updated[index].pdfFilename = filename
             }
@@ -276,9 +297,9 @@ final class AppStore: ObservableObject {
 
 enum SampleData {
     static let stores = [
-        GroceryStore(name: "Neighborhood Market", travelMinutes: 5, distanceMiles: 1.8, offers: [ProductOffer(product: "Coca-Cola 12 pack", price: 8.49, category: .beverage, alternatives: ["Pepsi", "cola"]), ProductOffer(product: "Whole Milk", price: 3.89, category: .dairy), ProductOffer(product: "Pepsi 12 pack", price: 7.49, category: .beverage, alternatives: ["Coca-Cola", "cola"]), ProductOffer(product: "Bananas", price: 1.49, category: .produce)]),
+        GroceryStore(name: "Neighborhood Market", travelMinutes: 5, distanceMiles: 1.8, offers: [ProductOffer(product: "Coca-Cola 12 pack", price: 8.49, category: .beverage, alternatives: ["Pepsi", "cola"]), ProductOffer(product: "Whole Milk", price: 3.89, category: .dairy), ProductOffer(product: "Pepsi 12 pack", price: 7.49, category: .beverage, alternatives: ["Coca-Cola", "cola"]), ProductOffer(product: "Bananas", price: 1.49, category: .fruit)]),
         GroceryStore(name: "Value Foods", travelMinutes: 10, distanceMiles: 4.2, offers: [ProductOffer(product: "Pepsi 12 pack", price: 6.99, category: .beverage, alternatives: ["Coca-Cola", "cola"]), ProductOffer(product: "2% Milk", price: 3.29, category: .dairy), ProductOffer(product: "Potato Chips", price: 3.99, category: .snack)]),
-        GroceryStore(name: "Super Center", travelMinutes: 30, distanceMiles: 18.0, offers: [ProductOffer(product: "Coca-Cola 24 pack", price: 12.99, category: .beverage, alternatives: ["Pepsi", "cola"]), ProductOffer(product: "Organic Milk", price: 4.99, category: .dairy), ProductOffer(product: "Apples", price: 4.49, category: .produce), ProductOffer(product: "Chocolate Cookies", price: 4.29, category: .snack)])
+        GroceryStore(name: "Super Center", travelMinutes: 30, distanceMiles: 18.0, offers: [ProductOffer(product: "Coca-Cola 24 pack", price: 12.99, category: .beverage, alternatives: ["Pepsi", "cola"]), ProductOffer(product: "Organic Milk", price: 4.99, category: .dairy), ProductOffer(product: "Apples", price: 4.49, category: .fruit), ProductOffer(product: "Chocolate Cookies", price: 4.29, category: .snack)])
     ]
-    static let receipts = [GroceryReceipt(merchant: "Neighborhood Market", date: .now.addingTimeInterval(-86400 * 2), items: [ReceiptItem(name: "Whole Milk", category: .dairy, unitPrice: 3.89, total: 3.89), ReceiptItem(name: "Bananas", category: .produce, quantity: 2, unitPrice: 0.75, total: 1.50), ReceiptItem(name: "Potato Chips", category: .snack, unitPrice: 3.99, total: 3.99)], tax: 0.32)]
+    static let receipts = [GroceryReceipt(merchant: "Neighborhood Market", date: .now.addingTimeInterval(-86400 * 2), items: [ReceiptItem(name: "Whole Milk", category: .dairy, unitPrice: 3.89, total: 3.89), ReceiptItem(name: "Bananas", category: .fruit, quantity: 2, unitPrice: 0.75, total: 1.50), ReceiptItem(name: "Potato Chips", category: .snack, unitPrice: 3.99, total: 3.99)], tax: 0.32)]
 }
