@@ -67,10 +67,11 @@ enum ReceiptPDFRenderer {
         y -= 24
 
         for item in items {
-            drawText(item.name, x: 42, y: y, size: 10, in: context)
-            drawText(item.category.rawValue, x: 372, y: y, size: 9, color: CGColor(gray: 0.3, alpha: 1), in: context)
-            drawText(item.quantity.formatted(.number.precision(.fractionLength(0...2))), x: 470, y: y, size: 9, in: context)
-            drawText(item.total.formatted(.currency(code: "USD")), x: 520, y: y, size: 9, weight: .bold, in: context)
+            let itemColor = item.category == .deposit ? CGColor(red: 0.01, green: 0.32, blue: 0.23, alpha: 1) : CGColor(gray: 0.08, alpha: 1)
+            drawText(item.name, x: 42, y: y, size: 10, color: itemColor, in: context)
+            drawText(item.category.rawValue, x: 372, y: y, size: 9, color: item.category == .deposit ? itemColor : CGColor(gray: 0.3, alpha: 1), in: context)
+            drawText(item.quantity.formatted(.number.precision(.fractionLength(0...2))), x: 470, y: y, size: 9, color: itemColor, in: context)
+            drawText(item.total.formatted(.currency(code: "USD")), x: 520, y: y, size: 9, weight: .bold, color: itemColor, in: context)
             y -= 25
             drawRule(y: y + 9, color: CGColor(gray: 0.9, alpha: 1), in: context)
         }

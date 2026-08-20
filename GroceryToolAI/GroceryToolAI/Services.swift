@@ -10,27 +10,39 @@ enum ReceiptCleaner {
 
     static func clean(text: String, date suppliedDate: Date? = nil) -> GroceryReceipt {
         let rawLines = text.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-        let lines = mergeSplitSummaryLines(rawLines)
+        let lines = mergeSplitSummaryLines(mergeSplitMoneyLines(rawLines))
         let merchant = merchantName(from: lines)
         var items: [ReceiptItem] = []
         var tax = 0.0
         var discount = 0.0
-        var pendingItem: (name: String, quantity: Double)?
+        var printedSubtotal: Double?
+        var printedTotal: Double?
+        var pendingItems: [(name: String, quantity: Double)] = []
+        var reachedSummary = false
         var consumedItemLines = Set<Int>()
         for (index, line) in lines.enumerated() {
             if consumedItemLines.contains(index) { continue }
             let lower = line.lowercased()
             if let match = line.range(of: moneyPattern, options: .regularExpression), let value = moneyValue(in: String(line[match])) {
-                if lower.contains("tax") { tax = value; pendingItem = nil; continue }
-                if lower.contains("discount") || lower.contains("coupon") || lower.contains("saving") { discount += value; pendingItem = nil; continue }
-                if lower.contains("total") || lower.contains("subtotal") || lower.contains("change") || lower.contains("payment") || lower.contains("amount") { pendingItem = nil; continue }
+                if lower.contains("tax") { tax = value; pendingItems.removeAll(); continue }
+                if lower.contains("discount") || lower.contains("coupon") || lower.contains("saving") { discount += value; pendingItems.removeAll(); continue }
+                if lower.contains("subtotal") || lower.contains("net sales") { printedSubtotal = value; reachedSummary = true; pendingItems.removeAll(); continue }
+                if lower.range(of: #"^\s*total\b"#, options: .regularExpression) != nil { printedTotal = value; reachedSummary = true; pendingItems.removeAll(); continue }
+                if isSummaryOrFooterLine(lower) { pendingItems.removeAll(); continue }
+                if reachedSummary || isNonMerchandiseLine(line, index: index) { continue }
 
                 let beforePrice = String(line[..<match.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
                 let parsed = itemNameAndQuantity(from: beforePrice) ?? (beforePrice, 1)
-                var item: (name: String, quantity: Double)? = parsed.name.isEmpty ? pendingItem : parsed
-                if parsed.name.isEmpty && item == nil {
+                var item: (name: String, quantity: Double)?
+                if !parsed.name.isEmpty, isLikelyPricedItemName(parsed.name) {
+                    item = parsed
+                } else if !pendingItems.isEmpty {
+                    item = pendingItems.removeFirst()
+                }
+                if item == nil {
                     for nextIndex in (index + 1)..<min(index + 3, lines.count) {
-                        if let next = itemNameAndQuantity(from: lines[nextIndex]), isLikelyItemName(next.name) {
+                        if !isNonMerchandiseLine(lines[nextIndex], index: nextIndex),
+                           let next = itemNameAndQuantity(from: lines[nextIndex]), isLikelyItemName(next.name) {
                             item = next
                             consumedItemLines.insert(nextIndex)
                             break
@@ -41,17 +53,29 @@ enum ReceiptCleaner {
                     let cleanName = cleanedItemName(item.name)
                     items.append(ReceiptItem(name: cleanName, category: category(for: cleanName), quantity: item.quantity, unitPrice: value / max(1, item.quantity), total: value))
                 }
-                pendingItem = nil
-            } else if line.range(of: quantityPattern, options: .regularExpression) != nil,
-                      let parsed = itemNameAndQuantity(from: line), isLikelyItemName(parsed.name) {
-                pendingItem = parsed
+            } else if lower.contains("subtotal") || lower.contains("net sales") {
+                reachedSummary = true
+                pendingItems.removeAll()
+            } else if reachedSummary || isNonMerchandiseLine(line, index: index) {
+                continue
+            } else if let parsed = itemNameAndQuantity(from: line), isLikelyItemName(parsed.name) {
+                if let lastIndex = pendingItems.indices.last,
+                   shouldMergeContinuation(pendingItems[lastIndex].name, with: parsed.name) {
+                    pendingItems[lastIndex].name += " " + parsed.name
+                } else {
+                    pendingItems.append(parsed)
+                }
             }
+        }
+        if tax == 0, let printedSubtotal, let printedTotal, printedTotal >= printedSubtotal {
+            tax = printedTotal - printedSubtotal + discount
         }
         return GroceryReceipt(merchant: merchant, date: suppliedDate ?? receiptDate(from: text) ?? .now, items: items, tax: tax, discount: discount, sourceText: text)
     }
 
     static func category(for name: String) -> GroceryCategory {
         let text = name.lowercased()
+        if ["container deposit", "bottle deposit", "can deposit", "refundable deposit", "redemption value", "crv fee"].contains(where: text.contains) { return .deposit }
         if ["kitkat", "kit kat", "chocolate", "chip", "cookie", "candy", "snack", "cracker", "biscuit", "wafer", "gummy", "popcorn"].contains(where: text.contains) { return .snack }
         if ["milk", "cheese", "yogurt", "cream", "reddi wip", "whipped", "butter", "egg"].contains(where: text.contains) { return .dairy }
         if ["cola", "soda", "water", "juice", "coffee", "tea", "drink", "beverage", "cider"].contains(where: text.contains) { return .beverage }
@@ -83,8 +107,48 @@ enum ReceiptCleaner {
 
     private static func isLikelyItemName(_ text: String) -> Bool {
         let lower = text.lowercased()
-        let excluded = ["station", "cashier", "subtotal", "total", "tax", "item count", "payment", "amount", "auth", "visa", "credit", "change"]
+        let excluded = ["station", "cashier", "subtotal", "total", "tax", "item count", "payment", "amount", "auth", "visa", "credit", "change", "net sales", "sold items", "returns", "tare weight", "qty ", "paid"]
         return text.count > 2 && text.rangeOfCharacter(from: .letters) != nil && !excluded.contains(where: lower.contains)
+    }
+
+    private static func isNonMerchandiseLine(_ line: String, index: Int) -> Bool {
+        let lower = line.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        if ["f", "ft", "fi"].contains(lower) { return true }
+        if lower.hasPrefix("qty ") || lower.hasPrefix("tare weight") || isSummaryOrFooterLine(lower) { return true }
+        if line.range(of: #"\b\d{1,2}/\d{1,2}/\d{2,4}\b"#, options: .regularExpression) != nil { return true }
+        if index < 12, ["market", "supermarket", "grocery", "mart"].contains(where: lower.contains) { return true }
+        if line.range(of: #"\b\d{3}[-.) ]\d{3}[- ]\d{4}\b"#, options: .regularExpression) != nil { return true }
+        if line.range(of: #"\b\d{5}(?:-\d{4})?\b"#, options: .regularExpression) != nil { return true }
+        let addressWords = [" blvd", " boulevard", " street", " st.", " road", " rd.", " avenue", " ave.", " highway", " hwy", " drive", " dr."]
+        if line.rangeOfCharacter(from: .decimalDigits) != nil, addressWords.contains(where: lower.contains) { return true }
+        return false
+    }
+
+    private static func isSummaryOrFooterLine(_ lower: String) -> Bool {
+        ["subtotal", "net sales", "sold items", "returns:", "paid:", "payment", "change", "visa", "mastercard", "amex", "refund", "proof of purchase", "shopping experience", "gift card", "membership", "prime visa", "wfm.com", "http://", "https://"].contains(where: lower.contains)
+    }
+
+    private static func shouldMergeContinuation(_ previous: String, with current: String) -> Bool {
+        let prior = previous.lowercased()
+        let next = current.lowercased()
+        return prior == "mtica mini" && !next.hasPrefix("mtica")
+    }
+
+    private static func mergeSplitMoneyLines(_ lines: [String]) -> [String] {
+        var merged: [String] = []
+        var index = 0
+        while index < lines.count {
+            if index + 1 < lines.count,
+               lines[index].range(of: #"^\s*\$?\d+\.\s*$"#, options: .regularExpression) != nil,
+               lines[index + 1].range(of: #"^\s*\d{2}\s*$"#, options: .regularExpression) != nil {
+                merged.append(lines[index].trimmingCharacters(in: .whitespaces) + lines[index + 1].trimmingCharacters(in: .whitespaces))
+                index += 2
+            } else {
+                merged.append(lines[index])
+                index += 1
+            }
+        }
+        return merged
     }
 
     private static func mergeSplitSummaryLines(_ lines: [String]) -> [String] {
@@ -117,6 +181,8 @@ enum ReceiptCleaner {
     }
 
     private static func merchantName(from lines: [String]) -> String {
+        let allText = lines.joined(separator: " ").lowercased()
+        if allText.contains("whole foods market") || allText.contains("whole food market") { return "Whole Foods Market" }
         let candidates = lines.prefix(10).filter { line in
             let lower = line.lowercased()
             return line.rangeOfCharacter(from: .letters) != nil &&

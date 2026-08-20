@@ -188,10 +188,17 @@ struct ReceiptDetailView: View {
             Section("Clean bill") {
                 ForEach(receipt.items) { item in
                     HStack {
-                        VStack(alignment: .leading) { Text(item.name); Text(item.category.rawValue).font(.caption).foregroundStyle(.secondary) }
+                        VStack(alignment: .leading) {
+                            Text(item.name)
+                            Text(item.category.rawValue)
+                                .font(.caption)
+                                .foregroundStyle(item.category == .deposit ? Color.refundableDeposit : .secondary)
+                        }
                         Spacer()
                         Text(item.total, format: .currency(code: "USD"))
+                            .foregroundStyle(item.category == .deposit ? Color.refundableDeposit : .primary)
                     }
+                    .listRowBackground(item.category == .deposit ? Color.refundableDepositBackground : Color.clear)
                 }
             }
             Section {
@@ -272,7 +279,20 @@ struct ReceiptEditor: View {
             Form {
                 Section("Receipt") { TextField("Store", text: $receipt.merchant); DatePicker("Date", selection: $receipt.date, displayedComponents: .date) }
                 Section("Items") {
-                    ForEach($receipt.items) { $item in HStack { TextField("Item", text: $item.name); TextField("Qty", value: $item.quantity, format: .number).frame(width: 48); Picker("Category", selection: $item.category) { ForEach(GroceryCategory.allCases) { Text($0.rawValue).tag($0) } }.labelsHidden(); TextField("Price", value: $item.total, format: .number.precision(.fractionLength(2))).frame(width: 80) } }
+                    ForEach($receipt.items) { $item in
+                        HStack {
+                            TextField("Item", text: $item.name)
+                                .foregroundStyle(item.category == .deposit ? Color.refundableDeposit : .primary)
+                            TextField("Qty", value: $item.quantity, format: .number).frame(width: 48)
+                            Picker("Category", selection: $item.category) { ForEach(GroceryCategory.allCases) { Text($0.rawValue).tag($0) } }
+                                .labelsHidden()
+                                .tint(item.category == .deposit ? Color.refundableDeposit : Color.appBlue)
+                            TextField("Price", value: $item.total, format: .number.precision(.fractionLength(2)))
+                                .frame(width: 80)
+                                .foregroundStyle(item.category == .deposit ? Color.refundableDeposit : .primary)
+                        }
+                        .listRowBackground(item.category == .deposit ? Color.refundableDepositBackground : Color.clear)
+                    }
                     .onDelete { receipt.items.remove(atOffsets: $0) }
                     Button("Add item", systemImage: "plus") { receipt.items.append(ReceiptItem(name: "", category: .other, unitPrice: 0, total: 0)) }
                 }

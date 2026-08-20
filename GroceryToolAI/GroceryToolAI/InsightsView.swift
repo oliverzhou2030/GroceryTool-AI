@@ -282,6 +282,7 @@ struct InsightsView: View {
             case .beverage: "饮料"
             case .snack: "零食"
             case .household: "家居用品"
+            case .deposit: "可退押金"
             case .other: "其他"
             }
         case .spanish:
@@ -295,6 +296,7 @@ struct InsightsView: View {
             case .beverage: "Bebidas"
             case .snack: "Aperitivos"
             case .household: "Hogar"
+            case .deposit: "Depósito reembolsable"
             case .other: "Otros"
             }
         }

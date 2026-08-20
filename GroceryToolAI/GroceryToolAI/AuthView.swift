@@ -93,6 +93,8 @@ struct AuthView: View {
 
 extension Color {
     static let appBlue = Color(red: 0.23, green: 0.62, blue: 0.92)
+    static let refundableDeposit = Color(light: Color(red: 0.01, green: 0.34, blue: 0.24), dark: Color(red: 0.25, green: 0.78, blue: 0.64))
+    static let refundableDepositBackground = Color(light: Color(red: 0.88, green: 0.97, blue: 0.93), dark: Color(red: 0.04, green: 0.20, blue: 0.17))
     static let appBackground = Color(light: Color(red: 0.94, green: 0.98, blue: 1), dark: Color(red: 0.05, green: 0.10, blue: 0.15))
 
     init(light: Color, dark: Color) {

@@ -64,9 +64,9 @@ struct StoreReview: Identifiable, Codable, Hashable {
 enum GroceryCategory: String, Codable, CaseIterable, Identifiable {
     case produce = "Produce", dairy = "Dairy", meat = "Meat", pantry = "Pantry"
     case frozen = "Frozen", bakery = "Bakery", beverage = "Beverages"
-    case snack = "Snacks", household = "Household", other = "Other"
+    case snack = "Snacks", household = "Household", deposit = "Refundable Deposit", other = "Other"
     var id: String { rawValue }
-    var isFood: Bool { ![.snack, .household, .other].contains(self) }
+    var isFood: Bool { ![.snack, .household, .deposit, .other].contains(self) }
 }
 
 struct ReceiptItem: Identifiable, Codable, Hashable {
@@ -187,12 +187,12 @@ struct SpendingAnalytics {
     var lineItems: [ReceiptItem] { receipts.flatMap(\.items) }
     var foodSnackRatio: Double { snackSpend == 0 ? foodSpend : foodSpend / snackSpend }
     var categoryItemCounts: [(GroceryCategory, Int)] {
-        Dictionary(grouping: lineItems, by: \.category).map { ($0.key, $0.value.count) }.sorted { lhs, rhs in
+        Dictionary(grouping: lineItems.filter { $0.category != .deposit }, by: \.category).map { ($0.key, $0.value.count) }.sorted { lhs, rhs in
             lhs.1 == rhs.1 ? lhs.0.rawValue < rhs.0.rawValue : lhs.1 > rhs.1
         }
     }
     var categorySpendTotals: [(GroceryCategory, Double)] {
-        let foodItems = lineItems.filter { ![GroceryCategory.household, .other].contains($0.category) }
+        let foodItems = lineItems.filter { ![GroceryCategory.household, .deposit, .other].contains($0.category) }
         return Dictionary(grouping: foodItems, by: \.category).map { category, items in
             (category, items.reduce(0) { $0 + $1.total })
         }.sorted { lhs, rhs in

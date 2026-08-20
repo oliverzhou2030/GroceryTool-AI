@@ -3,6 +3,7 @@ import PDFKit
 import Testing
 @testable import GroceryToolAI
 
+@Suite(.serialized)
 struct GroceryToolAITests {
     @Test func receiptCleanerExtractsItemsAndTax() {
         let text = """
@@ -70,6 +71,93 @@ struct GroceryToolAITests {
         #expect(receipt.items[0].name.contains("Enoki"))
         #expect(receipt.items[1].category == .dairy)
         #expect(receipt.total == 10.98)
+    }
+
+    @Test func wholeFoodsReceiptRejectsMetadataAndMarksRefundableDeposits() {
+        let text = """
+        MARKET
+        Manhasset MHS 516-869-8900
+        2101 Northern Blvd
+        Manhasset, NY 11030 3528
+        RBF CREAMLINE C MLK
+        $3.79 F
+        CONTAINER DEPOSIT
+        $3.00
+        RBF CREAMLINE WHL MLK
+        $3.19 F
+        CONTAINER DEPOSIT
+        BC MAPLE CT YOGURT
+        $3.00
+        ICLNPR STRW SKYR YOGURT
+        $1.49
+        F
+        Qty 2 $2.09 ea
+        $4.18 F
+        LAFRME HBSCS RSPBRY YGRT
+        ILEDF BRIE BITES
+        $3.
+        39
+        F
+        Qty 2 $1.19 ea
+        $2.38 F
+        MTICA MINI
+        BB RSMRY JAM
+        MTICA MINI RSPBRY BSL JAM
+        $3.99
+        $3.99
+        MTICA MINI MNDRN ORNG JAM
+        $3.99
+        WATERMELON QUARTER
+        $3.22
+        Qty 2.32 lb @ $1.39/1b
+        WFM WB ETHPIA COFFEE
+        $15.99 F
+        WFM WB DCF ETHPA CFFEE
+        $15.99 F
+        OG WHITE PEACH
+        $8.28 F
+        Qty 1.66 lb @ $4.99/1b
+        Tare Weight 0.05 lb
+        GREEN ASPARAGUS
+        $6.03 F
+        Qty 1.06 lb @ $5.69/1b
+        Tare Weight 0.03 1b
+        POLS SPRING WATER 24PK
+        $6.79 FI
+        CONTAINER DEPOSIT
+        $1.20
+        Subtotal:
+        $93.89
+        Net Sales:
+        $93.89
+        Tax:
+        8.62%
+        $0
+        1.59
+        Total:
+        $94.48
+        Sold Items:
+        17
+        Paid:
+        VISA
+        *0136
+        $94.48
+        RETURNS: All returns require proof
+        of purchase. No returns on items
+        Earn 5% back at Whole Foods Market
+        with Prime Visa
+        951 80799 08/19/2026 07:06 PM
+        """
+        let receipt = ReceiptCleaner.clean(text: text)
+        let names = receipt.items.map { $0.name.lowercased() }
+        #expect(receipt.merchant == "Whole Foods Market")
+        #expect(!names.contains(where: { $0.contains("northern") || $0.hasPrefix("qty") || $0.contains("tare weight") }))
+        #expect(!names.contains(where: { $0.contains("net sales") || $0.contains("sold items") || $0.contains("returns") || $0 == "visa" }))
+        #expect(receipt.items.filter { $0.category == .deposit }.count == 3)
+        #expect(receipt.items.filter { $0.category == .deposit }.allSatisfy { $0.name == "Container Deposit" })
+        #expect(abs(receipt.subtotal - 93.89) < 0.001)
+        #expect(abs(receipt.tax - 0.59) < 0.001)
+        #expect(abs(receipt.total - 94.48) < 0.001)
     }
 
     @Test func cleanReceiptPDFIncludesEveryDetailPage() throws {
